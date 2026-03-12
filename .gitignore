@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Data folder — back up separately, never commit
+DATA/
+
+# Logs
+*.log
+realtime_msg/logs/
+
+# OS
+.DS_Store
+Thumbs.db
