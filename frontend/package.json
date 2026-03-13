@@ -4,19 +4,21 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start": "vite --host",
+    "start": "npm run build && serve -s dist -l 5173",
+    "dev": "vite --host",
     "build": "vite build",
     "preview": "vite preview --host"
   },
   "dependencies": {
-    "react":            "^18.3.0",
-    "react-dom":        "^18.3.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
     "socket.io-client": "^4.7.2",
-    "framer-motion":    "^11.0.0",
-    "zustand":          "^4.5.0"
+    "framer-motion": "^11.0.0",
+    "zustand": "^4.5.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.0",
-    "vite":                 "^5.1.0"
+    "vite": "^5.1.0",
+    "serve": "^14.0.0"
   }
 }
