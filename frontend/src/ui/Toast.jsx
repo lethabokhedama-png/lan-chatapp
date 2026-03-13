@@ -1,37 +1,43 @@
-import React, { createContext, useContext, useState, useCallback } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import React, { useEffect, useState } from "react";
 
-const Ctx = createContext(null);
+let _addToast = null;
 
-let _id = 0;
-
-export function ToastProvider({ children }) {
-  const [toasts, setToasts] = useState([]);
-
-  const push = useCallback((msg, type = "info", duration = 3200) => {
-    const id = ++_id;
-    setToasts(t => [...t, { id, msg, type }]);
-    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), duration);
-  }, []);
-
-  return (
-    <Ctx.Provider value={push}>
-      {children}
-      <div className="toast-shelf">
-        <AnimatePresence>
-          {toasts.map(t => (
-            <motion.div key={t.id} className={`toast ${t.type}`}
-              initial={{ x: 40, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ x: 40, opacity: 0 }}
-              transition={{ duration: .18 }}>
-              {t.msg}
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
-    </Ctx.Provider>
-  );
+export function showToast(message, type = "info") {
+  if (_addToast) _addToast({ message, type, id: Date.now() });
 }
 
-export const useToast = () => useContext(Ctx);
+export default function Toast() {
+  const [toasts, setToasts] = useState([]);
+
+  useEffect(() => {
+    _addToast = (t) => {
+      setToasts(prev => [...prev, t]);
+      setTimeout(() => setToasts(prev => prev.filter(x => x.id !== t.id)), 3500);
+    };
+    return () => { _addToast = null; };
+  }, []);
+
+  if (!toasts.length) return null;
+
+  return (
+    <div style={{
+      position: "fixed", bottom: 80, right: 12,
+      display: "flex", flexDirection: "column", gap: 6, zIndex: 300,
+    }}>
+      {toasts.map(t => (
+        <div key={t.id} style={{
+          padding: "9px 14px",
+          background: "var(--bg-raised)",
+          border: `1px solid var(--border)`,
+          borderLeft: `3px solid ${t.type === "error" ? "var(--red)" : t.type === "success" ? "var(--green)" : "var(--accent)"}`,
+          borderRadius: "var(--radius)",
+          fontSize: 12, maxWidth: 280,
+          boxShadow: "0 8px 24px rgba(0,0,0,.4)",
+          color: "var(--text-1)",
+        }}>
+          {t.message}
+        </div>
+      ))}
+    </div>
+  );
+}
