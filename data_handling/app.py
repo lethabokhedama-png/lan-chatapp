@@ -7,8 +7,8 @@ config.SECRET = load_or_create(config.DATA_PATH)
 
 from flask import Flask, jsonify
 from flask_cors import CORS
-from utils.store import bootstrap
-from utils.audit import log_system
+from utils.store  import bootstrap
+from utils.audit  import log_system
 from app.auth     import bp as auth_bp
 from app.users    import bp as users_bp
 from app.rooms    import bp as rooms_bp
@@ -16,6 +16,7 @@ from app.messages import bp as messages_bp
 from app.uploads  import bp as uploads_bp
 from app.events   import bp as events_bp
 from app.dev      import bp as dev_bp
+from app.smart_replies import bp as smart_bp
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -27,6 +28,7 @@ app.register_blueprint(messages_bp, url_prefix="/api/messages")
 app.register_blueprint(uploads_bp,  url_prefix="/api/uploads")
 app.register_blueprint(events_bp,   url_prefix="/api/events")
 app.register_blueprint(dev_bp,      url_prefix="/api/dev")
+app.register_blueprint(smart_bp,    url_prefix="/api/dev")
 
 @app.get("/")
 def root():
@@ -49,20 +51,16 @@ def log_req(response):
 
 if __name__ == "__main__":
     bootstrap(config.DATA_PATH)
-
     import socket as _sock
     try:
         s = _sock.socket(); s.connect(("8.8.8.8", 80))
         host_ip = s.getsockname()[0]; s.close()
     except Exception:
         host_ip = "127.0.0.1"
-
     from utils.ip_ledger import record_host
     record_host(host_ip)
     log_system("server_start", {"ip": host_ip, "port": config.PORT})
-
     print(f"\n  [DataHandling] http://{host_ip}:{config.PORT}")
     print(f"  [DataHandling] DATA → {config.DATA_PATH}")
     print(f"  [DataHandling] Secret → DATA/secret.key\n")
-
     app.run(host=config.HOST, port=config.PORT, debug=True, threaded=True)

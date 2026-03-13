@@ -1,37 +1,26 @@
-/**
- * HTTP client for DataHandling API.
- * All persistence goes through here — realtime server never touches DATA/ directly.
- */
 const axios = require("axios");
-const { DH_URL } = require("../config");
+const cfg   = require("../config");
 
-const client = axios.create({
-  baseURL: DH_URL,
-  timeout: 8000,
-});
-
-async function dhPost(path, body, token) {
-  const headers = token ? { Authorization: `Bearer ${token}` } : {};
-  const res = await client.post(path, body, { headers });
-  return res.data;
-}
+const api = axios.create({ baseURL: cfg.DH_URL, timeout: 8000 });
 
 async function dhGet(path, token) {
-  const headers = token ? { Authorization: `Bearer ${token}` } : {};
-  const res = await client.get(path, { headers });
-  return res.data;
+  const r = await api.get(path, { headers: { Authorization: `Bearer ${token}` } });
+  return r.data;
+}
+
+async function dhPost(path, body, token) {
+  const r = await api.post(path, body, { headers: { Authorization: `Bearer ${token}` } });
+  return r.data;
 }
 
 async function dhPatch(path, body, token) {
-  const headers = token ? { Authorization: `Bearer ${token}` } : {};
-  const res = await client.patch(path, body, { headers });
-  return res.data;
+  const r = await api.patch(path, body, { headers: { Authorization: `Bearer ${token}` } });
+  return r.data;
 }
 
 async function dhDelete(path, token) {
-  const headers = token ? { Authorization: `Bearer ${token}` } : {};
-  const res = await client.delete(path, { headers });
-  return res.data;
+  const r = await api.delete(path, { headers: { Authorization: `Bearer ${token}` } });
+  return r.data;
 }
 
-module.exports = { dhPost, dhGet, dhPatch, dhDelete };
+module.exports = { dhGet, dhPost, dhPatch, dhDelete };

@@ -10,15 +10,16 @@
     "preview": "vite preview --host"
   },
   "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
+    "framer-motion": "^11.0.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "socket.io-client": "^4.7.2",
-    "framer-motion": "^11.0.0",
     "zustand": "^4.5.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.0",
-    "vite": "^5.1.0",
-    "serve": "^14.0.0"
+    "serve": "^14.0.0",
+    "vite": "^5.1.0"
   }
 }

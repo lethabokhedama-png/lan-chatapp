@@ -1,38 +1,37 @@
-// In-memory presence tracker
-// Maps socketId -> uid and uid -> Set of socketIds (multi-tab support)
+const sidToUid  = new Map();
+const uidToData = new Map(); // uid -> { sids: Set, username }
+const typingMap = new Map();
 
-const sidToUid = new Map();   // socketId -> uid
-const uidToSids = new Map();  // uid -> Set<socketId>
-const typingMap = new Map();  // roomId -> Set<uid>
-
-function connect(sid, uid) {
+function connect(sid, uid, username, token) {
   sidToUid.set(sid, uid);
-  if (!uidToSids.has(uid)) uidToSids.set(uid, new Set());
-  uidToSids.get(uid).add(sid);
+  if (!uidToData.has(uid)) uidToData.set(uid, { sids: new Set(), username });
+  uidToData.get(uid).sids.add(sid);
+  uidToData.get(uid).username = username;
 }
 
-// Returns uid if they fully went offline, null if they have other sockets
 function disconnect(sid) {
   const uid = sidToUid.get(sid);
   if (!uid) return null;
   sidToUid.delete(sid);
-  const sids = uidToSids.get(uid);
-  if (sids) {
-    sids.delete(sid);
-    if (sids.size === 0) {
-      uidToSids.delete(uid);
-      return uid; // fully offline
+  const data = uidToData.get(uid);
+  if (data) {
+    data.sids.delete(sid);
+    if (data.sids.size === 0) {
+      uidToData.delete(uid);
+      return uid;
     }
   }
-  return null; // still has other connections
+  return null;
 }
 
 function onlineList() {
-  return Array.from(uidToSids.keys());
+  return Array.from(uidToData.entries()).map(([uid, d]) => ({
+    uid, username: d.username,
+  }));
 }
 
 function isOnline(uid) {
-  return uidToSids.has(uid) && uidToSids.get(uid).size > 0;
+  return uidToData.has(uid) && uidToData.get(uid).sids.size > 0;
 }
 
 function startTyping(roomId, uid) {

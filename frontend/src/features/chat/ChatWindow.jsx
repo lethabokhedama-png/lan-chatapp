@@ -1,31 +1,36 @@
 import React, { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import {
+  List, MagnifyingGlass, Paperclip, ArrowLeft,
+  PaperPlaneTilt, X, Smiley
+} from "@phosphor-icons/react";
 import useStore   from "../../lib/store";
 import { messages as msgsApi, uploads } from "../../lib/api";
 import { emit }   from "../../lib/socket";
 import MessageBubble   from "./MessageBubble";
 import TypingIndicator from "./TypingIndicator";
+import SmartReplies from "./SmartReplies";
 
-const SMART = ["👍", "Ok", "On my way", "Be right back", "Thanks!", "👀"];
+
 
 export default function ChatWindow({ room }) {
   const {
     user, messages: msgMap, setMessages, prependMessages,
     appendMessage, typing, replyTo, setReplyTo,
-    userMap, onlineSet, toggleSidebar,
+    userMap, onlineSet, toggleSidebar, setActiveRoom,
   } = useStore();
 
   const roomMsgs   = msgMap[room.id] || [];
   const typingUids = (typing[room.id] || []).filter(u => u !== user?.id);
 
-  const scrollRef = useRef(null);
-  const inputRef  = useRef(null);
-  const fileRef   = useRef(null);
-  const [input, setInput]   = useState("");
+  const scrollRef  = useRef(null);
+  const inputRef   = useRef(null);
+  const fileRef    = useRef(null);
+  const [input, setInput]     = useState("");
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQ, setSearchQ]       = useState("");
+  const [searchOpen, setSearchOpen]   = useState(false);
+  const [searchQ, setSearchQ]         = useState("");
   const [searchResults, setSearchResults] = useState([]);
 
   useEffect(() => {
@@ -96,8 +101,7 @@ export default function ChatWindow({ room }) {
   }
 
   function onKeyDown(e) {
-    const prefs = useStore.getState().prefs;
-    if (e.key === "Enter" && !e.shiftKey && prefs?.enter_to_send !== false) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault(); sendMsg(input);
     }
   }
@@ -113,11 +117,12 @@ export default function ChatWindow({ room }) {
 
   let headerName = room.name;
   let headerSub  = "";
+  let otherId    = null;
   if (room.type === "dm") {
-    const otherId = room.members?.find?.(m => m.user_id !== user?.id)?.user_id;
-    const other   = userMap[otherId];
-    headerName    = other?.display_name || other?.username || "Direct Message";
-    headerSub     = onlineSet.has(otherId) ? "● online" : "offline";
+    otherId    = room.members?.find?.(m => m.user_id !== user?.id)?.user_id;
+    const other = userMap[otherId];
+    headerName  = other?.display_name || other?.username || "Direct Message";
+    headerSub   = onlineSet.has(otherId) ? "online" : "offline";
   } else {
     headerSub = room.topic || `${room.members?.length || 0} members`;
   }
@@ -136,82 +141,167 @@ export default function ChatWindow({ room }) {
   const grouped = groupMessages(roomMsgs);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+    <div style={{
+      display: "flex", flexDirection: "column",
+      height: "100%", overflow: "hidden",
+    }}>
       {/* Header */}
       <div className="chat-header">
-        <button className="icon-btn hamburger" onClick={toggleSidebar} style={{ fontSize: 18 }}>☰</button>
-        <div className="chat-header-info">
-          <div className="chat-header-name">{room.type === "channel" ? "# " : ""}{headerName}</div>
-          {headerSub && <div className="chat-header-sub" style={{ color: headerSub.includes("online") ? "var(--green)" : undefined }}>{headerSub}</div>}
+        <button className="icon-btn hamburger" onClick={toggleSidebar}>
+          <List size={20} weight="bold" />
+        </button>
+        <button className="icon-btn" onClick={() => setActiveRoom(null)}
+          style={{ display: "flex" }} title="Back">
+          <ArrowLeft size={18} weight="bold" />
+        </button>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 9, flex: 1, minWidth: 0 }}>
+          {room.type === "dm" && otherId && (
+            <div style={{ position: "relative", flexShrink: 0 }}>
+              <div style={{
+                width: 30, height: 30, borderRadius: "50%",
+                background: "linear-gradient(135deg, var(--accent), var(--accent2))",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 12, fontWeight: 700, color: "#fff",
+              }}>
+                {(userMap[otherId]?.display_name || userMap[otherId]?.username || "?")[0].toUpperCase()}
+              </div>
+              <div style={{
+                position: "absolute", bottom: 0, right: 0,
+                width: 9, height: 9, borderRadius: "50%",
+                background: onlineSet.has(otherId) ? "var(--green)" : "var(--text-3)",
+                border: "2px solid var(--bg-base)",
+                boxShadow: onlineSet.has(otherId) ? "0 0 5px var(--green)" : "none",
+              }} />
+            </div>
+          )}
+          <div className="chat-header-info">
+            <div className="chat-header-name">
+              {room.type === "channel" ? "# " : ""}{headerName}
+            </div>
+            {headerSub && (
+              <div className="chat-header-sub" style={{
+                color: headerSub === "online" ? "var(--green)" : undefined,
+              }}>
+                {headerSub === "online" ? "● online" : headerSub}
+              </div>
+            )}
+          </div>
         </div>
-        <button className="icon-btn" onClick={() => setSearchOpen(v => !v)} title="Search">⌕</button>
+
+        <button className="icon-btn" onClick={() => setSearchOpen(v => !v)} title="Search">
+          <MagnifyingGlass size={17} weight="bold" />
+        </button>
       </div>
 
-      {/* Search */}
+      {/* Search dropdown */}
       <AnimatePresence>
         {searchOpen && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
             style={{ overflow: "hidden", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
             <div style={{ padding: "8px 12px" }}>
-              <input className="input" placeholder="Search messages…" autoFocus
-                value={searchQ} onChange={onSearch} style={{ fontSize: 12, padding: "7px 11px" }} />
-              <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 3, maxHeight: 180, overflowY: "auto" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7,
+                background: "var(--bg-raised)", border: "1px solid var(--border)",
+                borderRadius: "var(--radius-sm)", padding: "7px 11px" }}>
+                <MagnifyingGlass size={13} color="var(--text-3)" />
+                <input placeholder="Search messages…" autoFocus value={searchQ}
+                  onChange={onSearch}
+                  style={{ flex: 1, background: "transparent", border: "none",
+                    outline: "none", color: "var(--text-1)", fontSize: 13,
+                    fontFamily: "var(--font-body)" }} />
+                {searchQ && <button className="icon-btn" style={{ width: 18, height: 18 }}
+                  onClick={() => { setSearchQ(""); setSearchResults([]); }}>
+                  <X size={11} /></button>}
+              </div>
+              <div style={{ marginTop: 6, display: "flex", flexDirection: "column",
+                gap: 3, maxHeight: 180, overflowY: "auto" }}>
                 {searchResults.map(m => (
-                  <div key={m.id} style={{ padding: "5px 8px", background: "var(--bg-raised)", borderRadius: "var(--radius-sm)", fontSize: 12, cursor: "pointer" }}
-                    onClick={() => { document.querySelector(`[data-msgid="${m.id}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" }); setSearchOpen(false); }}>
-                    <span style={{ color: "var(--accent)" }}>{userMap[m.sender_id]?.display_name || "User"}</span>
-                    <span style={{ color: "var(--text-3)", marginLeft: 6, fontSize: 10 }}>{m.created_at?.slice(0, 10)}</span>
+                  <div key={m.id} onClick={() => {
+                    document.querySelector(`[data-msgid="${m.id}"]`)
+                      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+                    setSearchOpen(false);
+                  }} style={{ padding: "5px 8px", background: "var(--bg-raised)",
+                    borderRadius: "var(--radius-sm)", fontSize: 12, cursor: "pointer" }}>
+                    <span style={{ color: "var(--accent)" }}>
+                      {userMap[m.sender_id]?.display_name || "User"}
+                    </span>
+                    <span style={{ color: "var(--text-3)", marginLeft: 6, fontSize: 10 }}>
+                      {m.created_at?.slice(0, 10)}
+                    </span>
                     <div style={{ marginTop: 2 }}>{m.content?.slice(0, 80)}</div>
                   </div>
                 ))}
-                {searchQ && !searchResults.length && <div style={{ color: "var(--text-3)", fontSize: 12 }}>No results</div>}
+                {searchQ && !searchResults.length && (
+                  <div style={{ color: "var(--text-3)", fontSize: 12, padding: "4px 8px" }}>
+                    No results
+                  </div>
+                )}
               </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Messages — scrollable middle */}
+      {/* Messages */}
       <div className="msg-scroll" ref={scrollRef}>
-        {hasMore && <button className="load-older" onClick={loadOlder} disabled={loading}>{loading ? "Loading…" : "Load older"}</button>}
+        {hasMore && (
+          <button className="load-older" onClick={loadOlder} disabled={loading}>
+            {loading ? "Loading…" : "Load older messages"}
+          </button>
+        )}
         <div className="msg-list">
           {grouped.map(({ msg, firstInGroup, showDate, dateLabel }) => (
             <React.Fragment key={msg.id || msg.client_id}>
               {showDate && <div className="date-divider">{dateLabel}</div>}
-              <MessageBubble msg={msg} firstInGroup={firstInGroup} mine={msg.sender_id === user?.id} room={room} />
+              <MessageBubble msg={msg} firstInGroup={firstInGroup}
+                mine={msg.sender_id === user?.id} room={room} />
             </React.Fragment>
           ))}
         </div>
       </div>
 
-      {/* Typing */}
+      {/* Typing indicator */}
       <TypingIndicator roomId={room.id} />
 
       {/* Smart replies */}
-      <div className="smart-replies">
-        {SMART.map(r => <button key={r} className="smart-chip" onClick={() => sendMsg(r)}>{r}</button>)}
-      </div>
+      <SmartReplies
+        lastMessage={roomMsgs[roomMsgs.length - 1]}
+        onSelect={sendMsg}
+        inputValue={input}
+      />
 
       {/* Reply bar */}
       <AnimatePresence>
         {replyTo && (
-          <motion.div className="reply-bar" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}>
+          <motion.div className="reply-bar"
+            initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}>
             <span>↩ Replying to <strong>{userMap[replyTo.sender_id]?.display_name || "User"}</strong></span>
-            <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text-3)" }}>{replyTo.content?.slice(0, 50)}</span>
-            <button className="icon-btn" onClick={() => setReplyTo(null)}>✕</button>
+            <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis",
+              whiteSpace: "nowrap", color: "var(--text-3)" }}>
+              {replyTo.content?.slice(0, 50)}
+            </span>
+            <button className="icon-btn" onClick={() => setReplyTo(null)}>
+              <X size={13} />
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Input — sticky bottom */}
+      {/* Input */}
       <div className="input-area">
         <input ref={fileRef} type="file" style={{ display: "none" }} onChange={onFile} />
         <div className="input-shell">
-          <button className="icon-btn" onClick={() => fileRef.current?.click()} title="Attach" style={{ fontSize: 17 }}>📎</button>
+          <button className="icon-btn" onClick={() => fileRef.current?.click()} title="Attach">
+            <Paperclip size={17} weight="bold" />
+          </button>
           <textarea ref={inputRef} className="msg-textarea" rows={1}
             placeholder={`Message ${room.type === "channel" ? "#" + room.name : headerName}…`}
             value={input} onChange={onInput} onKeyDown={onKeyDown} />
-          <button className="send-btn" disabled={!input.trim()} onClick={() => sendMsg(input)}>▶</button>
+          <button className="send-btn" disabled={!input.trim()} onClick={() => sendMsg(input)}>
+            <PaperPlaneTilt size={16} weight="fill" />
+          </button>
         </div>
       </div>
     </div>
