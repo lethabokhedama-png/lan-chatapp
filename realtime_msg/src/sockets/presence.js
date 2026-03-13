@@ -1,54 +1,51 @@
-/**
- * In-memory presence tracker.
- * uid → Set<socketId>
- * socketId → { uid, token }
- */
+// In-memory presence tracker
+// Maps socketId -> uid and uid -> Set of socketIds (multi-tab support)
 
-const _byUid   = new Map(); // uid  → Set<sid>
-const _bySid   = new Map(); // sid  → { uid, token }
-const _typing  = new Map(); // roomId → Set<uid>
+const sidToUid = new Map();   // socketId -> uid
+const uidToSids = new Map();  // uid -> Set<socketId>
+const typingMap = new Map();  // roomId -> Set<uid>
 
-function connect(sid, uid, token) {
-  _bySid.set(sid, { uid, token });
-  if (!_byUid.has(uid)) _byUid.set(uid, new Set());
-  _byUid.get(uid).add(sid);
+function connect(sid, uid) {
+  sidToUid.set(sid, uid);
+  if (!uidToSids.has(uid)) uidToSids.set(uid, new Set());
+  uidToSids.get(uid).add(sid);
 }
 
+// Returns uid if they fully went offline, null if they have other sockets
 function disconnect(sid) {
-  const info = _bySid.get(sid);
-  if (!info) return null;
-  _bySid.delete(sid);
-  const sids = _byUid.get(info.uid);
+  const uid = sidToUid.get(sid);
+  if (!uid) return null;
+  sidToUid.delete(sid);
+  const sids = uidToSids.get(uid);
   if (sids) {
     sids.delete(sid);
     if (sids.size === 0) {
-      _byUid.delete(info.uid);
-      return info.uid; // fully offline
+      uidToSids.delete(uid);
+      return uid; // fully offline
     }
   }
   return null; // still has other connections
 }
 
-function isOnline(uid)    { return _byUid.has(uid) && _byUid.get(uid).size > 0; }
-function onlineList()     { return [..._byUid.keys()]; }
-function infoForSid(sid)  { return _bySid.get(sid) || null; }
-function tokenForSid(sid) { return _bySid.get(sid)?.token || null; }
+function onlineList() {
+  return Array.from(uidToSids.keys());
+}
+
+function isOnline(uid) {
+  return uidToSids.has(uid) && uidToSids.get(uid).size > 0;
+}
 
 function startTyping(roomId, uid) {
-  if (!_typing.has(roomId)) _typing.set(roomId, new Set());
-  _typing.get(roomId).add(uid);
+  if (!typingMap.has(roomId)) typingMap.set(roomId, new Set());
+  typingMap.get(roomId).add(uid);
 }
 
 function stopTyping(roomId, uid) {
-  _typing.get(roomId)?.delete(uid);
+  typingMap.get(roomId)?.delete(uid);
 }
 
 function typingIn(roomId) {
-  return [...(_typing.get(roomId) || [])];
+  return Array.from(typingMap.get(roomId) || []);
 }
 
-module.exports = {
-  connect, disconnect,
-  isOnline, onlineList, infoForSid, tokenForSid,
-  startTyping, stopTyping, typingIn,
-};
+module.exports = { connect, disconnect, onlineList, isOnline, startTyping, stopTyping, typingIn };
