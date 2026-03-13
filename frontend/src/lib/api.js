@@ -3,7 +3,7 @@
  * All calls go to /api/* — Vite proxies to localhost:8000 in dev,
  * so in production point VITE_API_URL to the server's IP:8000.
  */
-const BASE = import.meta.env.VITE_API_URL || "";
+const BASE = import.meta.env.VITE_API_URL || "http://192.168.101.110:8000";
 
 let _token = localStorage.getItem("lc_token") || null;
 
