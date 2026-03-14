@@ -23,7 +23,8 @@ def ensure_dev_account():
     if not index_path.exists():
         return
     index = json.loads(index_path.read_text())
-    for uid_str, udata in index.get("users", {}).items():
+    for username_str, uid_val in index.get("users_by_username", {}).items():
+        udata = {"username": username_str}
         if udata.get("username", "").lower() == DEV_USERNAME:
             print("  [Dev] Account exists: @" + DEV_USERNAME)
             return
@@ -119,7 +120,8 @@ def list_all_users():
     index_path = Path(config.DATA_PATH) / "index.json"
     index      = json.loads(index_path.read_text())
     users = []
-    for uid_str, udata in index.get("users", {}).items():
+    for username_str, uid_val in index.get("users_by_username", {}).items():
+        udata = {"username": username_str}
         p = _get_profile_by_dir(udata.get("dir", ""))
         if p:
             users.append({k: v for k, v in p.items() if not k.startswith("_")})
