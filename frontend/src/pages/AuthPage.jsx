@@ -134,7 +134,7 @@ export default function AuthPage() {
         display: "flex", alignItems: "center", justifyContent: "center",
         gap: 8, flexWrap: "wrap",
       }}>
-        {["Made by LethaboK", "LAN only — no internet needed", "v0.4.0", "All data stays on your network"].map((item, i, arr) => (
+        {["Made by LethaboK", "LAN only — no internet needed", "v0.4.0", "All data stays on your network", "© 2026 LethaboK — All rights reserved"].map((item, i, arr) => (
           <React.Fragment key={item}>
             <span>{item}</span>
             {i < arr.length - 1 && <span style={{ color: "var(--border)" }}>•</span>}

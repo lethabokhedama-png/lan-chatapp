@@ -351,6 +351,9 @@ export default function SettingsModal() {
               <div style={{ marginTop: 16, fontSize: 11, color: "var(--text-3)", lineHeight: 1.8 }}>
                 Built for private LAN/hotspot use only.{"\n"}
                 No data leaves your network.
+
+© 2026 LethaboK — All rights reserved.
+Unauthorized copying or modification is prohibited.
               </div>
             </div>
           )}

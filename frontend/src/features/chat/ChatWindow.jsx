@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Menu, Search, Paperclip, ArrowLeft, Send, X } from "react-feather";
 import useStore from "../../lib/store";
 import { messages as msgsApi } from "../../lib/api";
-import { emit, getToken } from "../../lib/socket";
+import { emit } from "../../lib/socket";
+import { getToken } from "../../lib/api";
 import MessageBubble from "./MessageBubble";
 import SmartReplies  from "./SmartReplies";
 
