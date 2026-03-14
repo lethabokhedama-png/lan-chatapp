@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from "react";
-import { Clock } from "@phosphor-icons/react";
+import { Clock } from "react-feather";
 import useStore from "../../lib/store";
 import { emit } from "../../lib/socket";
 

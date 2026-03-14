@@ -21,7 +21,8 @@ def _save(data):
 
 @bp.get("/smart-replies")
 @require_auth
-def get_smart_replies(uid):
+def get_smart_replies():
+    uid  = request.uid
     q    = request.args.get("q", "").lower().strip()
     data = _load()
     suggestions = []
@@ -40,7 +41,8 @@ def get_smart_replies(uid):
 
 @bp.post("/learn-reply")
 @require_auth
-def learn_reply(uid):
+def learn_reply():
+    uid         = request.uid
     body        = request.json or {}
     context_msg = (body.get("context") or "").lower().strip()
     reply       = (body.get("reply")   or "").strip()

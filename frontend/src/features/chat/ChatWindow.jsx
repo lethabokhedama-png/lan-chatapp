@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { List, MagnifyingGlass, Paperclip, ArrowLeft, PaperPlaneTilt, X } from "@phosphor-icons/react";
+import { Menu, Search, Paperclip, ArrowLeft, Send, X } from "react-feather";
 import useStore from "../../lib/store";
 import { messages as msgsApi } from "../../lib/api";
 import { emit, getToken } from "../../lib/socket";
@@ -197,9 +197,9 @@ export default function ChatWindow({ room }) {
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
       {/* Header */}
       <div className="chat-header">
-        <button className="icon-btn hamburger" onClick={toggleSidebar}><List size={20} weight="bold" /></button>
+        <button className="icon-btn hamburger" onClick={toggleSidebar}><Menu size={20} /></button>
         <button className="icon-btn" onClick={() => setActiveRoom(null)} title="Back">
-          <ArrowLeft size={18} weight="bold" />
+          <ArrowLeft size={18} />
         </button>
 
         <div style={{ display: "flex", alignItems: "center", gap: 9, flex: 1, minWidth: 0 }}>
@@ -240,7 +240,7 @@ export default function ChatWindow({ room }) {
             )}
           </div>
         </div>
-        <button className="icon-btn" onClick={() => setSearchOpen(v => !v)}><MagnifyingGlass size={17} weight="bold" /></button>
+        <button className="icon-btn" onClick={() => setSearchOpen(v => !v)}><Search size={17} /></button>
       </div>
 
       {/* Search */}
@@ -255,7 +255,7 @@ export default function ChatWindow({ room }) {
                 background: "var(--bg-raised)", border: "1px solid var(--border)",
                 borderRadius: "var(--radius-sm)", padding: "7px 11px",
               }}>
-                <MagnifyingGlass size={13} color="var(--text-3)" />
+                <Search size={13} color="var(--text-3)" />
                 <input autoFocus placeholder="Search messages…" value={searchQ}
                   onChange={onSearch}
                   style={{ flex: 1, background: "transparent", border: "none", outline: "none",
@@ -374,13 +374,13 @@ export default function ChatWindow({ room }) {
         <input ref={fileRef} type="file" style={{ display: "none" }} />
         <div className="input-shell">
           <button className="icon-btn" onClick={() => fileRef.current?.click()} title="Attach">
-            <Paperclip size={17} weight="bold" />
+            <Paperclip size={17} />
           </button>
           <textarea ref={inputRef} className="msg-textarea" rows={1}
             placeholder={isGroup ? `Message #${room.name}… (@ to mention)` : `Message ${headerName}…`}
             value={input} onChange={onInput} onKeyDown={onKeyDown} />
           <button className="send-btn" disabled={!input.trim()} onClick={() => sendMsg(input)}>
-            <PaperPlaneTilt size={16} weight="fill" />
+            <Send size={15} />
           </button>
         </div>
       </div>

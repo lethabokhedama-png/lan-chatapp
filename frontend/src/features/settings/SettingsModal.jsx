@@ -322,7 +322,7 @@ export default function SettingsModal() {
                 LAN Chat
               </div>
               <div style={{ color: "var(--text-3)", fontSize: 12, marginBottom: 4 }}>
-                v1.0.0 — Local Network Messenger
+                v0.4.0 — Local Network Messenger
               </div>
               <div style={{ color: "var(--accent)", fontSize: 12, fontWeight: 600, marginBottom: 20 }}>
                 Made by LethaboK

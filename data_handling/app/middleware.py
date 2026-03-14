@@ -15,5 +15,5 @@ def require_auth(f):
             return jsonify({"error": "Invalid or expired token"}), 401
         record_access(request.remote_addr, uid)
         request.uid = uid
-        return f(uid, *args, **kwargs)
+        return f(*args, **kwargs)
     return wrapper

@@ -1,14 +1,16 @@
 import React, { useEffect, useState, useRef } from "react";
 import {
-  House, Hash, Plus, Gear, SignOut,
-  WifiNone, WifiHigh, MagnifyingGlass, X,
-  CaretDown, Bell, Lock, Palette, Info, User
-} from "@phosphor-icons/react";
+  Home, Hash, Plus, Settings, LogOut,
+  Wifi, WifiOff, Search, X,
+  ChevronUp, Bell, Lock, Feather, Info, User, MessageSquare
+} from "react-feather";
 import useStore from "../lib/store";
 import { rooms as roomsApi, auth, clearToken, users as usersApi } from "../lib/api";
 import { emit } from "../lib/socket";
 import Avatar from "./Avatar";
 import Modal  from "./Modal";
+
+const VERSION = "v0.4.0";
 
 export default function Sidebar() {
   const {
@@ -30,17 +32,19 @@ export default function Sidebar() {
     roomsApi.mine().then(r => setRooms(r)).catch(() => {});
   }, []);
 
-  // Close popover on outside click
   useEffect(() => {
     function onDown(e) {
       if (popRef.current && !popRef.current.contains(e.target)) setPopover(false);
     }
     document.addEventListener("mousedown", onDown);
     document.addEventListener("touchstart", onDown);
-    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("touchstart", onDown); };
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("touchstart", onDown);
+    };
   }, []);
 
-  const channels = rooms.filter(r => r.type === "channel");
+  const channels = rooms.filter(r => r.type === "channel" || r.type === "group");
   const dms      = rooms.filter(r => r.type === "dm");
 
   function dmOtherId(room) {
@@ -60,14 +64,11 @@ export default function Sidebar() {
     closeSidebar();
   }
 
-  function goHome() {
-    setActiveRoom(null);
-    closeSidebar();
-  }
+  function goHome() { setActiveRoom(null); closeSidebar(); }
 
-  async function createChannel() {
+  async function createGroup() {
     if (!chName.trim()) return;
-    const room = await roomsApi.createChannel({ name: chName, topic: chTopic });
+    const room = await roomsApi.createChannel({ name: chName, topic: chTopic, type: "group" });
     setRooms([...rooms, room]);
     openRoom(room);
     setShowCh(false); setChName(""); setChTopic("");
@@ -88,36 +89,37 @@ export default function Sidebar() {
 
   function logout() {
     auth.logout().catch(() => {});
-    clearToken(); clearAuth();
-    setPopover(false);
+    clearToken(); clearAuth(); setPopover(false);
   }
 
   const searchLower = search.toLowerCase();
-  const allRooms = [...channels, ...dms];
-  const filtered = search ? allRooms.filter(r =>
-    (r.type === "channel" ? r.name : dmLabel(r)).toLowerCase().includes(searchLower)
-  ) : null;
+  const filtered = search
+    ? [...channels, ...dms].filter(r =>
+        (r.type === "dm" ? dmLabel(r) : r.name).toLowerCase().includes(searchLower)
+      )
+    : null;
 
   return (
     <>
-      {/* Mobile overlay — click to close */}
       {sidebarOpen && (
-        <div
-          onClick={closeSidebar}
-          style={{
-            position: "fixed", inset: 0, zIndex: 18,
-            background: "rgba(0,0,0,.55)",
-            display: window.innerWidth < 700 ? "block" : "none",
-          }}
-        />
+        <div onClick={closeSidebar} style={{
+          position: "fixed", inset: 0, zIndex: 18,
+          background: "rgba(0,0,0,.55)",
+          display: window.innerWidth < 700 ? "block" : "none",
+        }} />
       )}
 
       <div className={`sidebar${sidebarOpen ? " open" : ""}`}>
         {/* Header */}
         <div className="sidebar-header">
           <div className="logo">
-            <div className="logo-icon">⬡</div>
-            <span className="logo-name">LAN Chat</span>
+            <div className="logo-icon">
+              <Feather size={14} color="#fff" />
+            </div>
+            <div>
+              <span className="logo-name">LAN Chat</span>
+              <div style={{ fontSize: 9, color: "var(--text-3)", letterSpacing: .5 }}>{VERSION}</div>
+            </div>
           </div>
           <ConnBadge />
         </div>
@@ -129,7 +131,7 @@ export default function Sidebar() {
             background: "var(--bg-raised)", border: "1px solid var(--border)",
             borderRadius: "var(--radius-sm)", padding: "6px 10px",
           }}>
-            <MagnifyingGlass size={13} color="var(--text-3)" weight="bold" />
+            <Search size={12} color="var(--text-3)" />
             <input placeholder="Search…" value={search}
               onChange={e => setSearch(e.target.value)}
               style={{
@@ -150,7 +152,7 @@ export default function Sidebar() {
           {/* Home */}
           <div style={{ padding: "4px 6px 2px" }}>
             <div className={`room-item${!activeRoom ? " active" : ""}`} onClick={goHome}>
-              <House size={14} weight={!activeRoom ? "fill" : "regular"} color="var(--accent)" />
+              <Home size={14} color={!activeRoom ? "var(--accent)" : "var(--text-3)"} />
               <span className="room-item-name">Home</span>
             </div>
           </div>
@@ -158,10 +160,10 @@ export default function Sidebar() {
           {/* Search results */}
           {filtered && (
             <div style={{ padding: "4px 6px" }}>
-              <div className="section-label" style={{ padding: "4px 10px 4px" }}>Results</div>
+              <div className="section-label" style={{ padding: "4px 10px" }}>Results</div>
               {filtered.map(r => (
                 <RoomRow key={r.id} r={r} active={activeRoom?.id === r.id}
-                  label={r.type === "channel" ? r.name : dmLabel(r)}
+                  label={r.type === "dm" ? dmLabel(r) : r.name}
                   online={r.type === "dm" ? onlineSet.has(Number(dmOtherId(r))) : null}
                   unread={unread[r.id]} userMap={userMap} otherId={dmOtherId(r)}
                   onClick={() => openRoom(r)} />
@@ -173,14 +175,16 @@ export default function Sidebar() {
           )}
 
           {!filtered && <>
-            {/* Channels */}
+            {/* Groups */}
             <div style={{ padding: "6px 0 0" }}>
               <div className="section-header">
-                <span className="section-label">Channels</span>
-                <button className="icon-btn" onClick={() => setShowCh(true)}><Plus size={14} weight="bold" /></button>
+                <span className="section-label">Groups</span>
+                <button className="icon-btn" onClick={() => setShowCh(true)} title="New group">
+                  <Plus size={14} />
+                </button>
               </div>
               {channels.length === 0 && (
-                <div style={{ padding: "3px 18px 8px", fontSize: 11, color: "var(--text-3)" }}>No channels yet</div>
+                <div style={{ padding: "3px 18px 8px", fontSize: 11, color: "var(--text-3)" }}>No groups yet</div>
               )}
               {channels.map(r => (
                 <RoomRow key={r.id} r={r} active={activeRoom?.id === r.id}
@@ -194,7 +198,9 @@ export default function Sidebar() {
             <div style={{ padding: "6px 0 0" }}>
               <div className="section-header">
                 <span className="section-label">Messages</span>
-                <button className="icon-btn" onClick={openDmModal}><Plus size={14} weight="bold" /></button>
+                <button className="icon-btn" onClick={openDmModal} title="New message">
+                  <Plus size={14} />
+                </button>
               </div>
               {dms.length === 0 && (
                 <div style={{ padding: "3px 18px 8px", fontSize: 11, color: "var(--text-3)" }}>No messages yet</div>
@@ -223,21 +229,23 @@ export default function Sidebar() {
               overflow: "hidden", zIndex: 50,
             }}>
               <div style={{ padding: "10px 14px 8px", borderBottom: "1px solid var(--border)" }}>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>{user?.display_name || user?.username}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>
+                  {user?.display_name || user?.username}
+                </div>
                 <div style={{ fontSize: 11, color: "var(--text-3)" }}>@{user?.username}</div>
               </div>
               {[
-                { icon: <User size={14} />,    label: "Account",       page: "account" },
-                { icon: <Bell size={14} />,    label: "Notifications", page: "notifications" },
-                { icon: <Palette size={14} />, label: "Appearance",    page: "appearance" },
-                { icon: <Lock size={14} />,    label: "Privacy",       page: "privacy" },
-                { icon: <Info size={14} />,    label: "About",         page: "about" },
+                { icon: <User size={14} />,     label: "Account",      page: "account" },
+                { icon: <Bell size={14} />,     label: "Notifications", page: "notifications" },
+                { icon: <Settings size={14} />, label: "Appearance",   page: "appearance" },
+                { icon: <Lock size={14} />,     label: "Privacy",      page: "privacy" },
+                { icon: <Info size={14} />,     label: "About",        page: "about" },
               ].map(item => (
                 <PopItem key={item.label} icon={item.icon} label={item.label}
                   onClick={() => { openSettings(item.page); setPopover(false); }} />
               ))}
               <div style={{ borderTop: "1px solid var(--border)" }}>
-                <PopItem icon={<SignOut size={14} />} label="Sign out"
+                <PopItem icon={<LogOut size={14} />} label="Sign out"
                   color="var(--red)" onClick={logout} />
               </div>
             </div>
@@ -250,7 +258,7 @@ export default function Sidebar() {
             background: popover ? "var(--bg-active)" : "transparent",
           }}
             onMouseEnter={e => { if (!popover) e.currentTarget.style.background = "var(--bg-hover)"; }}
-            onMouseLeave={e => { if (!popover) e.currentTarget.style.background = popover ? "var(--bg-active)" : "transparent"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = popover ? "var(--bg-active)" : "transparent"; }}
           >
             <div className="avatar-wrap">
               <Avatar user={user} size="md" />
@@ -260,32 +268,32 @@ export default function Sidebar() {
               <div className="footer-name">{user?.display_name || user?.username}</div>
               <div style={{ fontSize: 10, color: "var(--green)" }}>● online</div>
             </div>
-            <CaretDown size={13} color="var(--text-3)"
-              style={{ transform: popover ? "rotate(180deg)" : "none", transition: "transform 200ms" }} />
+            <ChevronUp size={13} color="var(--text-3)"
+              style={{ transform: popover ? "rotate(0deg)" : "rotate(180deg)", transition: "transform 200ms" }} />
           </div>
         </div>
       </div>
 
-      {/* Create channel */}
-      <Modal open={showCh} onClose={() => setShowCh(false)} title="New Channel">
+      {/* Create group modal */}
+      <Modal open={showCh} onClose={() => setShowCh(false)} title="New Group">
         <div className="form-group">
-          <label className="label">Name</label>
-          <input className="input" placeholder="e.g. general" value={chName}
+          <label className="label">Group Name</label>
+          <input className="input" placeholder="e.g. squad" value={chName}
             onChange={e => setChName(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && createChannel()} />
+            onKeyDown={e => e.key === "Enter" && createGroup()} />
         </div>
         <div className="form-group">
-          <label className="label">Topic (optional)</label>
-          <input className="input" placeholder="What's this about?" value={chTopic}
+          <label className="label">Description (optional)</label>
+          <input className="input" placeholder="What's this group about?" value={chTopic}
             onChange={e => setChTopic(e.target.value)} />
         </div>
         <div className="modal-footer">
           <button className="btn btn-ghost" onClick={() => setShowCh(false)}>Cancel</button>
-          <button className="btn btn-primary" onClick={createChannel}>Create</button>
+          <button className="btn btn-primary" onClick={createGroup}>Create</button>
         </div>
       </Modal>
 
-      {/* New DM */}
+      {/* New DM modal */}
       <Modal open={showDm} onClose={() => setShowDm(false)} title="New Direct Message">
         <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 320, overflowY: "auto" }}>
           {allUsers.map(u => {
@@ -293,14 +301,15 @@ export default function Sidebar() {
             return (
               <div key={u.id} onClick={() => startDm(u.id)} style={{
                 display: "flex", alignItems: "center", gap: 10,
-                padding: "9px 10px", borderRadius: "var(--radius-sm)",
-                cursor: "pointer",
+                padding: "9px 10px", borderRadius: "var(--radius-sm)", cursor: "pointer",
               }}
                 onMouseEnter={e => e.currentTarget.style.background = "var(--bg-hover)"}
                 onMouseLeave={e => e.currentTarget.style.background = ""}>
                 <Avatar user={u} size="sm" />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500 }}>{u.display_name || u.username}</div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-1)" }}>
+                    {u.display_name || u.username}
+                  </div>
                   <div style={{ fontSize: 10, color: "var(--text-3)" }}>@{u.username}</div>
                 </div>
                 <div style={{
@@ -388,12 +397,12 @@ function ConnBadge() {
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 4,
-      padding: "2px 8px", borderRadius: 20, fontSize: 10, fontWeight: 500,
+      padding: "2px 7px", borderRadius: 20, fontSize: 10, fontWeight: 500,
       background: connected ? "rgba(78,203,113,.1)" : "rgba(224,92,92,.1)",
       border: `1px solid ${connected ? "rgba(78,203,113,.3)" : "rgba(224,92,92,.3)"}`,
       color: connected ? "var(--green)" : "var(--red)",
     }}>
-      {connected ? <WifiHigh size={11} weight="bold" /> : <WifiNone size={11} weight="bold" />}
+      {connected ? <Wifi size={10} /> : <WifiOff size={10} />}
       {connected ? "live" : "off"}
     </div>
   );
