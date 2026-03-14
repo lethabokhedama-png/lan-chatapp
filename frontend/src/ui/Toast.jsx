@@ -6,7 +6,7 @@ let _audio    = null;
 
 function getAudio() {
   if (!_audio) {
-    _audio = new Audio("/notification.mp3");
+    _audio = new Audio("/rhea.mp3");
     _audio.volume = 0.6;
   }
   return _audio;

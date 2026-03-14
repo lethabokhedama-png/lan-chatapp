@@ -213,3 +213,22 @@ def unpin_message(room_id, msg_id):
     pins = [p for p in read(_room_root(room_id) / "pins.json", []) if p != msg_id]
     write(_room_root(room_id) / "pins.json", pins)
     return jsonify(pins)
+@bp.post("/group")
+@require_auth
+def create_group():
+    d    = request.json or {}
+    name = (d.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "name required"}), 400
+    room_id = f"gr_{next_room_id()}"
+    meta = {
+        "id":         room_id,
+        "type":       "group",
+        "name":       name,
+        "topic":      d.get("topic", ""),
+        "created_by": request.uid,
+        "created_at": now(),
+    }
+    _create_room(room_id, meta, request.uid)
+    register_room(room_id, name, "group")
+    return jsonify({**meta, "members": _room_members(room_id)}), 201

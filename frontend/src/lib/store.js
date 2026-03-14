@@ -75,6 +75,8 @@ const useStore = create((set, get) => ({
   closeSidebar:  () => set({ sidebarOpen: false }),
 
   prefs: {},
+  forwardMsg: null,
+  setForwardMsg: (msg) => set({ forwardMsg: msg }),
   setPrefs: (prefs) => set({ prefs }),
 }));
 
