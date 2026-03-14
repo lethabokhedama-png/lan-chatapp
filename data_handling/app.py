@@ -32,11 +32,11 @@ app.register_blueprint(smart_bp,    url_prefix="/api/dev")
 
 @app.get("/")
 def root():
-    return jsonify({"service": "LAN Chat API", "status": "running"})
+    return jsonify({"service": "LAN Chat API", "status": "running", "v": "0.5.0"})
 
 @app.get("/api/health")
 def health():
-    return jsonify({"status": "ok", "service": "data_handling", "v": "1.0.0"})
+    return jsonify({"status": "ok", "service": "data_handling", "v": "0.5.0"})
 
 @app.after_request
 def log_req(response):
@@ -51,16 +51,29 @@ def log_req(response):
 
 if __name__ == "__main__":
     bootstrap(config.DATA_PATH)
+
+    # Ensure admin account exists
+    from utils.admin import ensure_admin
+    ensure_admin(config.DATA_PATH)
+
+    # Update flags.json with new flags
+    from utils.flags import ensure_flags
+    ensure_flags(config.DATA_PATH)
+
     import socket as _sock
     try:
         s = _sock.socket(); s.connect(("8.8.8.8", 80))
         host_ip = s.getsockname()[0]; s.close()
     except Exception:
         host_ip = "127.0.0.1"
+
     from utils.ip_ledger import record_host
     record_host(host_ip)
     log_system("server_start", {"ip": host_ip, "port": config.PORT})
+
     print(f"\n  [DataHandling] http://{host_ip}:{config.PORT}")
     print(f"  [DataHandling] DATA → {config.DATA_PATH}")
     print(f"  [DataHandling] Secret → DATA/secret.key\n")
-    app.run(host=config.HOST, port=config.PORT, debug=True, threaded=True)
+
+    app.run(host=config.HOST, port=config.PORT, debug=True,
+            use_reloader=False, threaded=True)

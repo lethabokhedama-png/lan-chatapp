@@ -1,95 +1,128 @@
-"""
-/api/uploads  — file upload with content-addressed storage
-Files stored under DATA/uploads/<type>/<sha256_prefix>/<sha256>.<ext>
-"""
-import hashlib, uuid
-from pathlib import Path
+import os, hashlib, time
 from flask import Blueprint, request, jsonify, send_file
-from utils.audit    import log_upload
-from utils.store    import write, read, ensure_dir
-from utils.time     import now
+from pathlib import Path
 from app.middleware import require_auth
-import config
+import config, json
 
 bp = Blueprint("uploads", __name__)
 
-ALLOWED_IMAGES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
-ALLOWED_FILES  = {"application/pdf", "text/plain", "application/zip"}
-ALLOWED_VOICE  = {"audio/webm", "audio/ogg", "audio/mpeg", "audio/wav"}
-MAX_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB
+UPLOAD_BASE = Path(config.DATA_PATH) / "uploads"
 
+def _save_file(file, subdir):
+    data     = file.read()
+    sha      = hashlib.sha256(data).hexdigest()
+    ext      = Path(file.filename).suffix.lower() or ".bin"
+    rel_dir  = subdir / sha[:2]
+    rel_dir.mkdir(parents=True, exist_ok=True)
+    dest     = rel_dir / f"{sha}{ext}"
+    if not dest.exists():
+        dest.write_bytes(data)
+    return sha, ext, str(dest)
 
-def _classify_mime(mime: str) -> str:
-    if mime in ALLOWED_IMAGES: return "images"
-    if mime in ALLOWED_VOICE:  return "voice"
-    return "files"
-
-
-def _store_path(bucket: str, sha: str, ext: str) -> Path:
-    prefix = sha[:2]
-    p = Path(config.DATA_PATH) / "uploads" / bucket / prefix
-    ensure_dir(p)
-    return p / f"{sha}{ext}"
-
-
-@bp.post("/")
+@bp.post("/file")
 @require_auth
-def upload():
-    if "file" not in request.files:
+def upload_file():
+    uid  = request.uid
+    file = request.files.get("file")
+    if not file:
         return jsonify({"error": "No file"}), 400
-
-    f       = request.files["file"]
-    room_id = request.form.get("room_id", "")
-    data    = f.read()
-
-    if len(data) > MAX_SIZE_BYTES:
-        return jsonify({"error": "File too large (max 25 MB)"}), 413
-
-    mime    = f.content_type or "application/octet-stream"
-    sha     = hashlib.sha256(data).hexdigest()
-    ext     = Path(f.filename or "file").suffix.lower() or ""
-    bucket  = _classify_mime(mime)
-    fpath   = _store_path(bucket, sha, ext)
-
-    # Content-addressed: skip if identical file already stored
-    if not fpath.exists():
-        fpath.write_bytes(data)
-
-    file_id = sha  # The SHA256 IS the ID — deduplication is automatic
-
+    sha, ext, path = _save_file(file, UPLOAD_BASE / "files")
     meta = {
-        "id":            file_id,
-        "original_name": f.filename,
-        "mime":          mime,
-        "size":          len(data),
-        "bucket":        bucket,
-        "ext":           ext,
-        "uploader_id":   request.uid,
-        "room_id":       room_id,
-        "uploaded_at":   now(),
-        "_path":         str(fpath),   # internal, not sent to client
+        "id":         sha[:16],
+        "sha":        sha,
+        "filename":   file.filename,
+        "ext":        ext,
+        "url":        f"/api/uploads/serve/{sha[:2]}/{sha}{ext}",
+        "type":       "file",
+        "uploaded_by": uid,
+        "uploaded_at": int(time.time() * 1000),
     }
+    meta_path = UPLOAD_BASE / "files" / sha[:2] / f"{sha}.json"
+    meta_path.write_text(json.dumps(meta))
+    return jsonify(meta), 201
 
-    # Store metadata alongside the file
-    write(fpath.with_suffix(".meta.json"), meta)
-    log_upload(request.uid, file_id, mime, len(data), room_id)
-
-    return jsonify({k: v for k, v in meta.items() if not k.startswith("_")}), 201
-
-
-@bp.get("/<file_id>")
+@bp.post("/voice")
 @require_auth
-def get_file(file_id):
-    # Search all buckets
-    for bucket in ("images", "voice", "files"):
-        prefix = file_id[:2]
-        base   = Path(config.DATA_PATH) / "uploads" / bucket / prefix
-        if not base.exists():
-            continue
-        for p in base.iterdir():
-            if p.stem == file_id and p.suffix != ".json":
-                meta_path = p.with_suffix(".meta.json")
-                meta = read(meta_path, {})
-                return send_file(p, download_name=meta.get("original_name", p.name),
-                                 mimetype=meta.get("mime", "application/octet-stream"))
-    return jsonify({"error": "Not found"}), 404
+def upload_voice():
+    uid  = request.uid
+    file = request.files.get("file")
+    if not file:
+        return jsonify({"error": "No file"}), 400
+    sha, ext, path = _save_file(file, UPLOAD_BASE / "voice")
+    meta = {
+        "id":         sha[:16],
+        "sha":        sha,
+        "filename":   file.filename,
+        "ext":        ext,
+        "url":        f"/api/uploads/voice-serve/{sha[:2]}/{sha}{ext}",
+        "type":       "voice",
+        "uploaded_by": uid,
+        "uploaded_at": int(time.time() * 1000),
+    }
+    meta_path = UPLOAD_BASE / "voice" / sha[:2] / f"{sha}.json"
+    meta_path.write_text(json.dumps(meta))
+    return jsonify(meta), 201
+
+@bp.post("/photo")
+@require_auth
+def upload_photo():
+    uid       = request.uid
+    file      = request.files.get("file")
+    max_views = int(request.form.get("max_views", 1))
+    if not file:
+        return jsonify({"error": "No file"}), 400
+    sha, ext, path = _save_file(file, UPLOAD_BASE / "photos")
+    meta = {
+        "id":          sha[:16],
+        "sha":         sha,
+        "filename":    file.filename,
+        "ext":         ext,
+        "url":         f"/api/uploads/photo-serve/{sha[:2]}/{sha}{ext}",
+        "type":        "photo",
+        "max_views":   max_views,
+        "view_count":  0,
+        "viewers":     [],
+        "uploaded_by": uid,
+        "uploaded_at": int(time.time() * 1000),
+    }
+    meta_path = UPLOAD_BASE / "photos" / sha[:2] / f"{sha}.json"
+    meta_path.write_text(json.dumps(meta))
+    return jsonify(meta), 201
+
+@bp.post("/photo-view/<path:file_path>")
+@require_auth
+def view_photo(file_path):
+    uid       = request.uid
+    meta_path = UPLOAD_BASE / "photos" / Path(file_path).parent / f"{Path(file_path).stem}.json"
+    if not meta_path.exists():
+        return jsonify({"error": "Not found"}), 404
+    meta = json.loads(meta_path.read_text())
+    if uid not in meta["viewers"]:
+        meta["viewers"].append(uid)
+        meta["view_count"] = len(meta["viewers"])
+    meta_path.write_text(json.dumps(meta))
+    return jsonify(meta)
+
+@bp.get("/serve/<path:file_path>")
+def serve_file(file_path):
+    p = UPLOAD_BASE / "files" / file_path
+    if not p.exists(): return jsonify({"error": "Not found"}), 404
+    return send_file(str(p))
+
+@bp.get("/voice-serve/<path:file_path>")
+def serve_voice(file_path):
+    p = UPLOAD_BASE / "voice" / file_path
+    if not p.exists(): return jsonify({"error": "Not found"}), 404
+    return send_file(str(p), mimetype="audio/webm")
+
+@bp.get("/photo-serve/<path:file_path>")
+@require_auth
+def serve_photo(file_path):
+    uid       = request.uid
+    meta_path = UPLOAD_BASE / "photos" / Path(file_path).parent / f"{Path(file_path).stem}.json"
+    meta      = json.loads(meta_path.read_text()) if meta_path.exists() else {}
+    if meta.get("view_count", 0) >= meta.get("max_views", 1) and uid not in meta.get("viewers", []):
+        return jsonify({"error": "Photo expired"}), 410
+    p = UPLOAD_BASE / "photos" / file_path
+    if not p.exists(): return jsonify({"error": "Not found"}), 404
+    return send_file(str(p))

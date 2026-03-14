@@ -54,7 +54,7 @@ export default function Sidebar() {
   function dmLabel(room) {
     const otherId = dmOtherId(room);
     const other   = otherId ? userMap[Number(otherId)] : null;
-    return other?.display_name || other?.username || "Direct Message";
+    return other?.display_name || other?.username || "DM";
   }
 
   async function openRoom(room) {
@@ -212,6 +212,7 @@ export default function Sidebar() {
                   <RoomRow key={r.id} r={r} active={activeRoom?.id === r.id}
                     label={dmLabel(r)} online={online} unread={unread[r.id]}
                     userMap={userMap} otherId={otherId}
+                    sub={userMap[Number(otherId)] ? "@" + userMap[Number(otherId)]?.username : null}
                     onClick={() => openRoom(r)} />
                 );
               })}
@@ -337,7 +338,7 @@ export default function Sidebar() {
   );
 }
 
-function RoomRow({ r, active, label, icon, online, unread, userMap, otherId, onClick }) {
+function RoomRow({ r, active, label, icon, online, unread, userMap, otherId, onClick, sub }) {
   return (
     <div className={`room-item${active ? " active" : ""}`} onClick={onClick}>
       {icon
@@ -361,7 +362,10 @@ function RoomRow({ r, active, label, icon, online, unread, userMap, otherId, onC
           </div>
         : null
       }
-      <span className="room-item-name">{label}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="room-item-name">{label}</div>
+        {sub && <div className="room-item-sub">{sub}</div>}
+      </div>
       {!!unread && <div className="unread-badge">{unread > 99 ? "99+" : unread}</div>}
     </div>
   );

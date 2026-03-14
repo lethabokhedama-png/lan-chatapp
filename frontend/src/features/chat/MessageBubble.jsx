@@ -2,8 +2,10 @@ import React, { useRef, useEffect, useState } from "react";
 import { Clock } from "react-feather";
 import useStore from "../../lib/store";
 import { emit } from "../../lib/socket";
+import VoicePlayer       from "./VoicePlayer";
+import DisappearingPhoto from "./DisappearingPhoto";
 
-export default function MessageBubble({ msg, firstInGroup, mine, room, isGroup, onReply, typingUids }) {
+export default function MessageBubble({ msg, firstInGroup, mine, room, isGroup, onReply, isLatest, typingUids }) {
   const { userMap, user } = useStore();
   const [pressed, setPressed] = useState(false);
   const pressTimer = useRef(null);
@@ -23,50 +25,72 @@ export default function MessageBubble({ msg, firstInGroup, mine, room, isGroup, 
     return () => obs.disconnect();
   }, [msg.id]);
 
-  function onTouchStart() {
-    pressTimer.current = setTimeout(() => setPressed(true), 400);
-  }
-  function onTouchEnd() {
-    clearTimeout(pressTimer.current);
-    setTimeout(() => setPressed(false), 2000);
+  function onTouchStart() { pressTimer.current = setTimeout(() => setPressed(true), 400); }
+  function onTouchEnd()   { clearTimeout(pressTimer.current); setTimeout(() => setPressed(false), 2200); }
+
+  function scrollToReply() {
+    if (!msg.reply_to_id) return;
+    const el = document.querySelector(`[data-msgid="${msg.reply_to_id}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.style.background = "var(--bg-active)";
+      setTimeout(() => el.style.background = "", 1200);
+    }
   }
 
-  // Render @mentions with highlights
   function renderContent(text) {
     if (!text) return null;
-    const parts = text.split(/(@\w+)/g);
-    return parts.map((part, i) => {
+    return text.split(/(@\w+)/g).map((part, i) => {
       if (part.startsWith("@")) {
-        const uname = part.slice(1);
-        const isMe  = uname === user?.username;
+        const isMe = part.slice(1) === user?.username;
         return <span key={i} className={`mention${isMe ? " me" : ""}`}>{part}</span>;
       }
       return part;
     });
   }
 
-  const isSeen      = (msg.seen_by || []).filter(id => Number(id) !== Number(user?.id)).length > 0;
-  const isDelivered = (msg.delivered_to || []).filter(id => Number(id) !== Number(user?.id)).length > 0;
-  const isOnline    = room.type === "dm"
-    ? onlineSet_stub(room, user, useStore.getState().onlineSet)
-    : false;
+  const seenBy      = (msg.seen_by      || []).filter(id => Number(id) !== Number(user?.id));
+  const deliveredTo = (msg.delivered_to || []).filter(id => Number(id) !== Number(user?.id));
+  const otherId     = room.members?.find?.(m => Number(m.user_id) !== Number(user?.id))?.user_id;
+  const otherOnline = useStore.getState().onlineSet.has(Number(otherId));
 
-  function onlineSet_stub(room, user, onlineSet) {
-    const otherId = room.members?.find?.(m => Number(m.user_id) !== Number(user?.id))?.user_id;
-    return onlineSet.has(Number(otherId));
-  }
-
-  // Status: clock | • sent (offline) | •• delivered/online | ••• seen
   function getStatus() {
     if (msg._optimistic || !msg.id) return "clock";
-    if (isSeen) return "seen";
-    if (isDelivered || isOnline) return "delivered";
+    if (seenBy.length > 0)          return "seen";
+    if (deliveredTo.length > 0 || otherOnline) return "delivered";
     return "sent";
   }
 
-  const status = mine ? getStatus() : null;
+  const status   = mine ? getStatus() : null;
+  const isSeen   = seenBy.length > 0;
+  const isTyping = (typingUids || []).length > 0;
 
-  const isTyping = typingUids?.length > 0;
+  // Render message content based on type
+  function renderBody() {
+    if (deleted) return (
+      <span style={{ fontStyle: "italic", color: "var(--text-3)" }}>
+        {isGroup && msg.deleted_by
+          ? `Message deleted by @${userMap[Number(msg.deleted_by)]?.username || "unknown"}`
+          : "Message deleted"}
+      </span>
+    );
+
+    if (msg.type === "voice") return (
+      <VoicePlayer url={msg.file_url} duration={msg.duration} />
+    );
+
+    if (msg.type === "image" && msg.max_views) return (
+      <DisappearingPhoto msg={msg} mine={mine} />
+    );
+
+    if (msg.type === "image") return (
+      <img src={msg.file_url} alt={msg.content}
+        style={{ maxWidth: 220, maxHeight: 180, borderRadius: 8, display: "block" }}
+        onError={e => e.target.style.display = "none"} />
+    );
+
+    return <span>{renderContent(msg.content)}</span>;
+  }
 
   return (
     <div
@@ -93,7 +117,6 @@ export default function MessageBubble({ msg, firstInGroup, mine, room, isGroup, 
       </div>
 
       <div className="msg-col">
-        {/* Sender + time */}
         {firstInGroup && !mine && (
           <div className="msg-meta">
             <span className="msg-sender">{sender?.display_name || sender?.username || "Unknown"}</span>
@@ -103,28 +126,18 @@ export default function MessageBubble({ msg, firstInGroup, mine, room, isGroup, 
 
         <div style={{ position: "relative" }}>
           <div className={`msg-bubble${deleted ? " deleted" : ""}`}>
-            {/* Reply quote */}
+            {/* Reply quote — tappable */}
             {msg.reply_to_content && (
-              <div className="reply-quote">
-                <div className="rq-sender">{msg.reply_to_sender || "User"}</div>
+              <div className="reply-quote" onClick={scrollToReply}
+                style={{ cursor: "pointer" }}>
+                <div className="rq-sender">↩ {msg.reply_to_sender || "User"}</div>
                 <div className="rq-text">{msg.reply_to_content}</div>
               </div>
             )}
 
-            {deleted
-              ? <span style={{ fontStyle: "italic", color: "var(--text-3)" }}>
-                  {isGroup && msg.deleted_by
-                    ? `Message deleted by @${userMap[Number(msg.deleted_by)]?.username || "unknown"}`
-                    : "Message deleted"}
-                </span>
-              : msg.type === "image"
-              ? <img src={msg.file_url} alt={msg.content}
-                  style={{ maxWidth: 220, maxHeight: 180, borderRadius: 8, display: "block" }}
-                  onError={e => e.target.style.display = "none"} />
-              : <span>{renderContent(msg.content)}</span>
-            }
+            {renderBody()}
 
-            {/* Time + status row inside bubble */}
+            {/* Time + status */}
             {mine && !deleted && (
               <div className="status-row">
                 <span className="status-time">{fmtTime(msg.created_at)}</span>
@@ -138,16 +151,15 @@ export default function MessageBubble({ msg, firstInGroup, mine, room, isGroup, 
             )}
           </div>
 
-          {/* Seen label — only when not typing */}
-          {mine && isSeen && !isTyping && (
+          {/* Seen label — only on latest message, only when not typing */}
+          {mine && isSeen && isLatest && !isTyping && (
             <div className="seen-label">Seen ✓</div>
           )}
 
-          {/* Long-press action buttons */}
+          {/* Long-press actions */}
           {pressed && !deleted && (
             <div style={{
-              position: "absolute",
-              top: -34,
+              position: "absolute", top: -34,
               [mine ? "left" : "right"]: 0,
               background: "var(--bg-surface)",
               border: "1px solid var(--border)",
@@ -177,16 +189,14 @@ function StatusDots({ status }) {
       <Clock size={11} />
     </span>
   );
-
-  const configs = {
-    sent:      { count: 1, color: "var(--receipt-sent)",      label: "Sent" },
-    delivered: { count: 2, color: "var(--receipt-delivered)", label: "Delivered" },
-    seen:      { count: 3, color: "var(--receipt-seen)",      label: "Seen" },
-  };
-  const cfg = configs[status] || configs.sent;
+  const cfg = {
+    sent:      { count: 1, color: "var(--receipt-sent)" },
+    delivered: { count: 2, color: "var(--receipt-delivered)" },
+    seen:      { count: 3, color: "var(--receipt-seen)" },
+  }[status] || { count: 1, color: "var(--receipt-sent)" };
 
   return (
-    <span title={cfg.label} style={{ display: "inline-flex", gap: 2, alignItems: "center" }}>
+    <span style={{ display: "inline-flex", gap: 2, alignItems: "center" }}>
       {Array.from({ length: cfg.count }).map((_, i) => (
         <span key={i} className="status-dot" style={{
           background: cfg.color,
