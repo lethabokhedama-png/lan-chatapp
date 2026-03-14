@@ -1,17 +1,11 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  List, MagnifyingGlass, Paperclip, ArrowLeft,
-  PaperPlaneTilt, X, Smiley
-} from "@phosphor-icons/react";
-import useStore   from "../../lib/store";
-import { messages as msgsApi, uploads } from "../../lib/api";
-import { emit }   from "../../lib/socket";
-import MessageBubble   from "./MessageBubble";
-import TypingIndicator from "./TypingIndicator";
-import SmartReplies from "./SmartReplies";
-
-
+import { List, MagnifyingGlass, Paperclip, ArrowLeft, PaperPlaneTilt, X } from "@phosphor-icons/react";
+import useStore from "../../lib/store";
+import { messages as msgsApi } from "../../lib/api";
+import { emit, getToken } from "../../lib/socket";
+import MessageBubble from "./MessageBubble";
+import SmartReplies  from "./SmartReplies";
 
 export default function ChatWindow({ room }) {
   const {
@@ -20,18 +14,31 @@ export default function ChatWindow({ room }) {
     userMap, onlineSet, toggleSidebar, setActiveRoom,
   } = useStore();
 
+  const isGroup    = room.type === "group" || room.type === "channel";
   const roomMsgs   = msgMap[room.id] || [];
-  const typingUids = (typing[room.id] || []).filter(u => u !== user?.id);
+  const typingUids = (typing[room.id] || []).filter(u => Number(u) !== Number(user?.id));
 
   const scrollRef  = useRef(null);
   const inputRef   = useRef(null);
   const fileRef    = useRef(null);
-  const [input, setInput]     = useState("");
-  const [hasMore, setHasMore] = useState(true);
-  const [loading, setLoading] = useState(false);
-  const [searchOpen, setSearchOpen]   = useState(false);
-  const [searchQ, setSearchQ]         = useState("");
+
+  const [input, setInput]       = useState("");
+  const [hasMore, setHasMore]   = useState(true);
+  const [loading, setLoading]   = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQ, setSearchQ]   = useState("");
   const [searchResults, setSearchResults] = useState([]);
+  const [mentionQ, setMentionQ] = useState("");
+  const [mentionIdx, setMentionIdx] = useState(0);
+
+  // @mention popup list
+  const mentionUsers = mentionQ
+    ? Object.values(userMap).filter(u =>
+        Number(u.id) !== Number(user?.id) &&
+        (u.username.toLowerCase().includes(mentionQ.toLowerCase()) ||
+         (u.display_name || "").toLowerCase().includes(mentionQ.toLowerCase()))
+      ).slice(0, 5)
+    : [];
 
   useEffect(() => {
     setInput(""); setReplyTo(null);
@@ -47,7 +54,7 @@ export default function ChatWindow({ room }) {
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    if (el.scrollHeight - el.scrollTop - el.clientHeight < 140) scrollToBottom();
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 160) scrollToBottom();
   }, [roomMsgs.length]);
 
   function scrollToBottom() {
@@ -59,8 +66,8 @@ export default function ChatWindow({ room }) {
     if (loading || !hasMore) return;
     setLoading(true);
     const oldest = roomMsgs[0];
-    const prev = scrollRef.current?.scrollHeight || 0;
-    const msgs = await msgsApi.fetch(room.id, { limit: 50, before_id: oldest?.id }).catch(() => []);
+    const prev   = scrollRef.current?.scrollHeight || 0;
+    const msgs   = await msgsApi.fetch(room.id, { limit: 50, before_id: oldest?.id }).catch(() => []);
     prependMessages(room.id, msgs);
     setHasMore(msgs.length === 50);
     setLoading(false);
@@ -71,58 +78,101 @@ export default function ChatWindow({ room }) {
   }
 
   const typingTimer = useRef(null);
+
   function onInput(e) {
-    setInput(e.target.value);
+    const val = e.target.value;
+    setInput(val);
     e.target.style.height = "auto";
     e.target.style.height = Math.min(e.target.scrollHeight, 100) + "px";
+
+    // Detect @mention in groups
+    if (isGroup) {
+      const match = val.slice(0, e.target.selectionStart).match(/@(\w*)$/);
+      setMentionQ(match ? match[1] : "");
+      setMentionIdx(0);
+    }
+
     emit.typingStart(room.id);
     clearTimeout(typingTimer.current);
     typingTimer.current = setTimeout(() => emit.typingStop(room.id), 1800);
   }
 
+  function insertMention(u) {
+    const cursorPos = inputRef.current?.selectionStart || input.length;
+    const before    = input.slice(0, cursorPos).replace(/@\w*$/, `@${u.username} `);
+    const after     = input.slice(cursorPos);
+    setInput(before + after);
+    setMentionQ("");
+    inputRef.current?.focus();
+  }
+
+  function onKeyDown(e) {
+    // Handle mention navigation
+    if (mentionUsers.length && mentionQ !== undefined) {
+      if (e.key === "ArrowDown") { e.preventDefault(); setMentionIdx(i => (i + 1) % mentionUsers.length); return; }
+      if (e.key === "ArrowUp")   { e.preventDefault(); setMentionIdx(i => (i - 1 + mentionUsers.length) % mentionUsers.length); return; }
+      if (e.key === "Enter" && mentionUsers.length) { e.preventDefault(); insertMention(mentionUsers[mentionIdx]); return; }
+      if (e.key === "Escape") { setMentionQ(""); return; }
+    }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMsg(input); }
+  }
+
   function sendMsg(content) {
     if (!content.trim()) return;
     const clientId = `tmp_${Date.now()}`;
+
+    // Extract mentioned UIDs
+    const mentionedUids = [];
+    if (isGroup) {
+      const matches = content.matchAll(/@(\w+)/g);
+      for (const m of matches) {
+        const found = Object.values(userMap).find(u => u.username === m[1]);
+        if (found) mentionedUids.push(found.id);
+      }
+    }
+
     appendMessage(room.id, {
       id: null, client_id: clientId, room_id: room.id,
-      sender_id: user.id, content: content.trim(),
-      type: "text", created_at: new Date().toISOString(),
+      sender_id: user.id, content: content.trim(), type: "text",
+      created_at: new Date().toISOString(),
       delivered_to: [], seen_by: [], _optimistic: true,
+      reply_to_id: replyTo?.id || null,
+      reply_to_content: replyTo?.content || null,
+      reply_to_sender: replyTo ? (userMap[replyTo.sender_id]?.display_name || userMap[replyTo.sender_id]?.username) : null,
     });
+
     emit.sendMsg({
-      roomId: room.id, content: content.trim(),
-      type: "text", replyTo: replyTo?.id || null, clientId,
+      roomId: room.id, content: content.trim(), type: "text",
+      replyTo: replyTo?.id || null, clientId, mentionedUids,
     });
-    setInput(""); setReplyTo(null);
+
+    setInput(""); setReplyTo(null); setMentionQ("");
     emit.typingStop(room.id);
     clearTimeout(typingTimer.current);
     if (inputRef.current) inputRef.current.style.height = "auto";
     setTimeout(scrollToBottom, 80);
-  }
 
-  function onKeyDown(e) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault(); sendMsg(input);
+    // Learn reply
+    const msgs  = useStore.getState().messages[room.id] || [];
+    const prev  = [...msgs].reverse().find(m => Number(m.sender_id) !== Number(user.id));
+    if (prev?.content) {
+      fetch((import.meta.env.VITE_API_URL || "") + "/api/dev/learn-reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("lanchat_token")}` },
+        body: JSON.stringify({ context: prev.content, reply: content.trim() }),
+      }).catch(() => {});
     }
   }
 
-  async function onFile(e) {
-    const file = e.target.files[0]; if (!file) return; e.target.value = "";
-    const meta = await uploads.upload(file, room.id).catch(() => null);
-    if (!meta) return;
-    emit.sendMsg({ roomId: room.id, content: file.name,
-      type: file.type.startsWith("image/") ? "image" : "file",
-      fileId: meta.id, clientId: `tmp_${Date.now()}` });
-  }
-
+  // Header info
   let headerName = room.name;
   let headerSub  = "";
   let otherId    = null;
   if (room.type === "dm") {
-    otherId    = room.members?.find?.(m => m.user_id !== user?.id)?.user_id;
-    const other = userMap[otherId];
-    headerName  = other?.display_name || other?.username || "Direct Message";
-    headerSub   = onlineSet.has(otherId) ? "online" : "offline";
+    otherId      = room.members?.find?.(m => Number(m.user_id) !== Number(user?.id))?.user_id;
+    const other  = userMap[Number(otherId)];
+    headerName   = other?.display_name || other?.username || "Direct Message";
+    headerSub    = onlineSet.has(Number(otherId)) ? "online" : "offline";
   } else {
     headerSub = room.topic || `${room.members?.length || 0} members`;
   }
@@ -133,25 +183,22 @@ export default function ChatWindow({ room }) {
     clearTimeout(searchTimer.current);
     searchTimer.current = setTimeout(async () => {
       if (!e.target.value.trim()) { setSearchResults([]); return; }
-      const r = await msgsApi.search(room.id, e.target.value).catch(() => []);
+      const r = await msgsApi.search?.(room.id, e.target.value).catch(() => []) || [];
       setSearchResults(r);
     }, 300);
   }
 
+  const lastMsg    = roomMsgs[roomMsgs.length - 1];
+  const otherTyping = typingUids.map(uid => userMap[Number(uid)]?.display_name || userMap[Number(uid)]?.username || "Someone");
+
   const grouped = groupMessages(roomMsgs);
 
   return (
-    <div style={{
-      display: "flex", flexDirection: "column",
-      height: "100%", overflow: "hidden",
-    }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
       {/* Header */}
       <div className="chat-header">
-        <button className="icon-btn hamburger" onClick={toggleSidebar}>
-          <List size={20} weight="bold" />
-        </button>
-        <button className="icon-btn" onClick={() => setActiveRoom(null)}
-          style={{ display: "flex" }} title="Back">
+        <button className="icon-btn hamburger" onClick={toggleSidebar}><List size={20} weight="bold" /></button>
+        <button className="icon-btn" onClick={() => setActiveRoom(null)} title="Back">
           <ArrowLeft size={18} weight="bold" />
         </button>
 
@@ -159,83 +206,77 @@ export default function ChatWindow({ room }) {
           {room.type === "dm" && otherId && (
             <div style={{ position: "relative", flexShrink: 0 }}>
               <div style={{
-                width: 30, height: 30, borderRadius: "50%",
+                width: 32, height: 32, borderRadius: "50%",
                 background: "linear-gradient(135deg, var(--accent), var(--accent2))",
                 display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 12, fontWeight: 700, color: "#fff",
+                fontSize: 13, fontWeight: 700, color: "#fff",
               }}>
-                {(userMap[otherId]?.display_name || userMap[otherId]?.username || "?")[0].toUpperCase()}
+                {(userMap[Number(otherId)]?.display_name || userMap[Number(otherId)]?.username || "?")[0].toUpperCase()}
               </div>
               <div style={{
                 position: "absolute", bottom: 0, right: 0,
                 width: 9, height: 9, borderRadius: "50%",
-                background: onlineSet.has(otherId) ? "var(--green)" : "var(--text-3)",
-                border: "2px solid var(--bg-base)",
-                boxShadow: onlineSet.has(otherId) ? "0 0 5px var(--green)" : "none",
+                background: onlineSet.has(Number(otherId)) ? "var(--green)" : "var(--text-3)",
+                border: "2px solid var(--bg-surface)",
               }} />
             </div>
           )}
+          {isGroup && (
+            <div style={{
+              width: 32, height: 32, borderRadius: 10, flexShrink: 0,
+              background: "linear-gradient(135deg, var(--accent), var(--accent2))",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 16,
+            }}>👥</div>
+          )}
           <div className="chat-header-info">
-            <div className="chat-header-name">
-              {room.type === "channel" ? "# " : ""}{headerName}
-            </div>
+            <div className="chat-header-name">{headerName}</div>
             {headerSub && (
               <div className="chat-header-sub" style={{
                 color: headerSub === "online" ? "var(--green)" : undefined,
               }}>
-                {headerSub === "online" ? "● online" : headerSub}
+                {headerSub === "online" ? "● online" : headerSub === "offline" ? "● offline" : headerSub}
               </div>
             )}
           </div>
         </div>
-
-        <button className="icon-btn" onClick={() => setSearchOpen(v => !v)} title="Search">
-          <MagnifyingGlass size={17} weight="bold" />
-        </button>
+        <button className="icon-btn" onClick={() => setSearchOpen(v => !v)}><MagnifyingGlass size={17} weight="bold" /></button>
       </div>
 
-      {/* Search dropdown */}
+      {/* Search */}
       <AnimatePresence>
         {searchOpen && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             style={{ overflow: "hidden", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
             <div style={{ padding: "8px 12px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 7,
+              <div style={{
+                display: "flex", alignItems: "center", gap: 7,
                 background: "var(--bg-raised)", border: "1px solid var(--border)",
-                borderRadius: "var(--radius-sm)", padding: "7px 11px" }}>
+                borderRadius: "var(--radius-sm)", padding: "7px 11px",
+              }}>
                 <MagnifyingGlass size={13} color="var(--text-3)" />
-                <input placeholder="Search messages…" autoFocus value={searchQ}
+                <input autoFocus placeholder="Search messages…" value={searchQ}
                   onChange={onSearch}
-                  style={{ flex: 1, background: "transparent", border: "none",
-                    outline: "none", color: "var(--text-1)", fontSize: 13,
-                    fontFamily: "var(--font-body)" }} />
+                  style={{ flex: 1, background: "transparent", border: "none", outline: "none",
+                    color: "var(--text-1)", fontSize: 13, fontFamily: "var(--font-body)" }} />
                 {searchQ && <button className="icon-btn" style={{ width: 18, height: 18 }}
                   onClick={() => { setSearchQ(""); setSearchResults([]); }}>
                   <X size={11} /></button>}
               </div>
-              <div style={{ marginTop: 6, display: "flex", flexDirection: "column",
-                gap: 3, maxHeight: 180, overflowY: "auto" }}>
+              <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 3, maxHeight: 180, overflowY: "auto" }}>
                 {searchResults.map(m => (
                   <div key={m.id} onClick={() => {
-                    document.querySelector(`[data-msgid="${m.id}"]`)
-                      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+                    document.querySelector(`[data-msgid="${m.id}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
                     setSearchOpen(false);
-                  }} style={{ padding: "5px 8px", background: "var(--bg-raised)",
-                    borderRadius: "var(--radius-sm)", fontSize: 12, cursor: "pointer" }}>
-                    <span style={{ color: "var(--accent)" }}>
-                      {userMap[m.sender_id]?.display_name || "User"}
-                    </span>
-                    <span style={{ color: "var(--text-3)", marginLeft: 6, fontSize: 10 }}>
-                      {m.created_at?.slice(0, 10)}
-                    </span>
+                  }} style={{ padding: "5px 8px", background: "var(--bg-raised)", borderRadius: "var(--radius-sm)", fontSize: 12, cursor: "pointer" }}>
+                    <span style={{ color: "var(--accent)" }}>{userMap[m.sender_id]?.display_name || "User"}</span>
+                    <span style={{ color: "var(--text-3)", marginLeft: 6, fontSize: 10 }}>{m.created_at?.slice(0, 10)}</span>
                     <div style={{ marginTop: 2 }}>{m.content?.slice(0, 80)}</div>
                   </div>
                 ))}
                 {searchQ && !searchResults.length && (
-                  <div style={{ color: "var(--text-3)", fontSize: 12, padding: "4px 8px" }}>
-                    No results
-                  </div>
+                  <div style={{ color: "var(--text-3)", fontSize: 12, padding: "4px 8px" }}>No results</div>
                 )}
               </div>
             </div>
@@ -254,22 +295,33 @@ export default function ChatWindow({ room }) {
           {grouped.map(({ msg, firstInGroup, showDate, dateLabel }) => (
             <React.Fragment key={msg.id || msg.client_id}>
               {showDate && <div className="date-divider">{dateLabel}</div>}
-              <MessageBubble msg={msg} firstInGroup={firstInGroup}
-                mine={msg.sender_id === user?.id} room={room} />
+              <MessageBubble
+                msg={msg} firstInGroup={firstInGroup}
+                mine={Number(msg.sender_id) === Number(user?.id)}
+                room={room} isGroup={isGroup}
+                onReply={() => setReplyTo(msg)}
+                typingUids={typingUids}
+              />
             </React.Fragment>
           ))}
         </div>
       </div>
 
       {/* Typing indicator */}
-      <TypingIndicator roomId={room.id} />
+      <div className="typing-bar">
+        {otherTyping.length > 0 && (
+          <>
+            <div className="typing-dots"><span/><span/><span/></div>
+            <span>
+              💬 <strong style={{ color: "var(--accent)" }}>{otherTyping.join(", ")}</strong>
+              {otherTyping.length === 1 ? " is typing…" : " are typing…"}
+            </span>
+          </>
+        )}
+      </div>
 
       {/* Smart replies */}
-      <SmartReplies
-        lastMessage={roomMsgs[roomMsgs.length - 1]}
-        onSelect={sendMsg}
-        inputValue={input}
-      />
+      <SmartReplies lastMessage={lastMsg} onSelect={sendMsg} inputValue={input} />
 
       {/* Reply bar */}
       <AnimatePresence>
@@ -277,27 +329,55 @@ export default function ChatWindow({ room }) {
           <motion.div className="reply-bar"
             initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}>
-            <span>↩ Replying to <strong>{userMap[replyTo.sender_id]?.display_name || "User"}</strong></span>
-            <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis",
-              whiteSpace: "nowrap", color: "var(--text-3)" }}>
-              {replyTo.content?.slice(0, 50)}
-            </span>
-            <button className="icon-btn" onClick={() => setReplyTo(null)}>
-              <X size={13} />
-            </button>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 10, color: "var(--accent)", marginBottom: 2 }}>
+                ↩ Replying to {userMap[replyTo.sender_id]?.display_name || "User"}
+              </div>
+              <div style={{ fontSize: 12, color: "var(--text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {replyTo.content?.slice(0, 60)}
+              </div>
+            </div>
+            <button className="icon-btn" onClick={() => setReplyTo(null)}><X size={13} /></button>
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* Input */}
-      <div className="input-area">
-        <input ref={fileRef} type="file" style={{ display: "none" }} onChange={onFile} />
+      <div className="input-area" style={{ position: "relative" }}>
+        {/* @mention popup */}
+        <AnimatePresence>
+          {isGroup && mentionUsers.length > 0 && (
+            <motion.div className="mention-popup"
+              initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 6 }}>
+              {mentionUsers.map((u, i) => (
+                <div key={u.id} className={`mention-item${i === mentionIdx ? " selected" : ""}`}
+                  onClick={() => insertMention(u)}>
+                  <div style={{
+                    width: 28, height: 28, borderRadius: "50%",
+                    background: "linear-gradient(135deg, var(--accent), var(--accent2))",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 11, fontWeight: 700, color: "#fff", flexShrink: 0,
+                  }}>
+                    {(u.display_name || u.username)[0].toUpperCase()}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 500 }}>{u.display_name || u.username}</div>
+                    <div style={{ fontSize: 10, color: "var(--text-3)" }}>@{u.username}</div>
+                  </div>
+                </div>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <input ref={fileRef} type="file" style={{ display: "none" }} />
         <div className="input-shell">
           <button className="icon-btn" onClick={() => fileRef.current?.click()} title="Attach">
             <Paperclip size={17} weight="bold" />
           </button>
           <textarea ref={inputRef} className="msg-textarea" rows={1}
-            placeholder={`Message ${room.type === "channel" ? "#" + room.name : headerName}…`}
+            placeholder={isGroup ? `Message #${room.name}… (@ to mention)` : `Message ${headerName}…`}
             value={input} onChange={onInput} onKeyDown={onKeyDown} />
           <button className="send-btn" disabled={!input.trim()} onClick={() => sendMsg(input)}>
             <PaperPlaneTilt size={16} weight="fill" />

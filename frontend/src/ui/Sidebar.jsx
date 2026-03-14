@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useRef } from "react";
 import {
-  House, Hash, ChatCircleDots, Plus, Gear, SignOut,
+  House, Hash, Plus, Gear, SignOut,
   WifiNone, WifiHigh, MagnifyingGlass, X,
-  CaretDown, Bell, Lock, Palette, Info, ArrowLeft
+  CaretDown, Bell, Lock, Palette, Info, User
 } from "@phosphor-icons/react";
 import useStore from "../lib/store";
-import { rooms as roomsApi, auth, clearToken } from "../lib/api";
+import { rooms as roomsApi, auth, clearToken, users as usersApi } from "../lib/api";
 import { emit } from "../lib/socket";
 import Avatar from "./Avatar";
 import Modal  from "./Modal";
@@ -14,8 +14,7 @@ export default function Sidebar() {
   const {
     rooms, setRooms, setActiveRoom, activeRoom,
     sidebarOpen, toggleSidebar, closeSidebar,
-    user, clearAuth, onlineSet, unread, openSettings,
-    userMap,
+    user, clearAuth, onlineSet, unread, openSettings, userMap,
   } = useStore();
 
   const [showCh, setShowCh]     = useState(false);
@@ -24,7 +23,6 @@ export default function Sidebar() {
   const [chName, setChName]     = useState("");
   const [chTopic, setChTopic]   = useState("");
   const [search, setSearch]     = useState("");
-  const [showSearch, setShowSearch] = useState(false);
   const [popover, setPopover]   = useState(false);
   const popRef = useRef(null);
 
@@ -32,39 +30,39 @@ export default function Sidebar() {
     roomsApi.mine().then(r => setRooms(r)).catch(() => {});
   }, []);
 
+  // Close popover on outside click
   useEffect(() => {
-    function onClick(e) {
+    function onDown(e) {
       if (popRef.current && !popRef.current.contains(e.target)) setPopover(false);
     }
-    document.addEventListener("mousedown", onClick);
-    document.addEventListener("touchstart", onClick);
-    return () => { document.removeEventListener("mousedown", onClick); document.removeEventListener("touchstart", onClick); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("touchstart", onDown);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("touchstart", onDown); };
   }, []);
 
   const channels = rooms.filter(r => r.type === "channel");
   const dms      = rooms.filter(r => r.type === "dm");
 
-  const filtered = search.trim()
-    ? [...channels, ...dms].filter(r => roomLabel(r, user, userMap).toLowerCase().includes(search.toLowerCase()))
-    : null;
+  function dmOtherId(room) {
+    return room.members?.find?.(m => Number(m.user_id) !== Number(user?.id))?.user_id;
+  }
 
-  function roomLabel(r, u, map) {
-    if (r.type === "channel") return r.name;
-    const m = r.members?.find(m => m.user_id !== u?.id);
-    const other = m ? map[m.user_id] : null;
-    return other?.display_name || other?.username || "DM";
+  function dmLabel(room) {
+    const otherId = dmOtherId(room);
+    const other   = otherId ? userMap[Number(otherId)] : null;
+    return other?.display_name || other?.username || "Direct Message";
   }
 
   async function openRoom(room) {
     setActiveRoom(room);
     useStore.getState().clearUnread(room.id);
     emit.joinRoom(room.id);
-    if (window.innerWidth < 700) closeSidebar();
+    closeSidebar();
   }
 
   function goHome() {
     setActiveRoom(null);
-    if (window.innerWidth < 700) closeSidebar();
+    closeSidebar();
   }
 
   async function createChannel() {
@@ -76,9 +74,8 @@ export default function Sidebar() {
   }
 
   async function openDmModal() {
-    const { users } = await import("../lib/api");
-    const list = await users.list();
-    setAllUsers(list.filter(u => u.id !== user?.id));
+    const list = await usersApi.list();
+    setAllUsers(list.filter(u => Number(u.id) !== Number(user?.id)));
     setShowDm(true);
   }
 
@@ -95,20 +92,24 @@ export default function Sidebar() {
     setPopover(false);
   }
 
-  function dmOtherId(room) {
-    return room.members?.find?.(m => m.user_id !== user?.id)?.user_id;
-  }
-
-  const displayRooms = filtered || null;
+  const searchLower = search.toLowerCase();
+  const allRooms = [...channels, ...dms];
+  const filtered = search ? allRooms.filter(r =>
+    (r.type === "channel" ? r.name : dmLabel(r)).toLowerCase().includes(searchLower)
+  ) : null;
 
   return (
     <>
+      {/* Mobile overlay — click to close */}
       {sidebarOpen && (
-        <div onClick={closeSidebar} style={{
-          display: window.innerWidth < 700 ? "block" : "none",
-          position: "fixed", inset: 0, zIndex: 19,
-          background: "rgba(0,0,0,.5)",
-        }} />
+        <div
+          onClick={closeSidebar}
+          style={{
+            position: "fixed", inset: 0, zIndex: 18,
+            background: "rgba(0,0,0,.55)",
+            display: window.innerWidth < 700 ? "block" : "none",
+          }}
+        />
       )}
 
       <div className={`sidebar${sidebarOpen ? " open" : ""}`}>
@@ -121,7 +122,7 @@ export default function Sidebar() {
           <ConnBadge />
         </div>
 
-        {/* Search bar */}
+        {/* Search */}
         <div style={{ padding: "6px 10px", borderBottom: "1px solid var(--border)" }}>
           <div style={{
             display: "flex", alignItems: "center", gap: 7,
@@ -129,17 +130,19 @@ export default function Sidebar() {
             borderRadius: "var(--radius-sm)", padding: "6px 10px",
           }}>
             <MagnifyingGlass size={13} color="var(--text-3)" weight="bold" />
-            <input
-              placeholder="Search rooms…"
-              value={search} onChange={e => setSearch(e.target.value)}
+            <input placeholder="Search…" value={search}
+              onChange={e => setSearch(e.target.value)}
               style={{
                 flex: 1, background: "transparent", border: "none",
                 outline: "none", color: "var(--text-1)", fontSize: 12,
                 fontFamily: "var(--font-body)",
-              }}
-            />
-            {search && <button className="icon-btn" style={{ width: 18, height: 18, fontSize: 10 }}
-              onClick={() => setSearch("")}><X size={11} /></button>}
+              }} />
+            {search && (
+              <button className="icon-btn" style={{ width: 16, height: 16 }}
+                onClick={() => setSearch("")}>
+                <X size={11} />
+              </button>
+            )}
           </div>
         </div>
 
@@ -147,45 +150,40 @@ export default function Sidebar() {
           {/* Home */}
           <div style={{ padding: "4px 6px 2px" }}>
             <div className={`room-item${!activeRoom ? " active" : ""}`} onClick={goHome}>
-              <House size={15} weight={!activeRoom ? "fill" : "regular"} color="var(--accent)" />
+              <House size={14} weight={!activeRoom ? "fill" : "regular"} color="var(--accent)" />
               <span className="room-item-name">Home</span>
             </div>
           </div>
 
           {/* Search results */}
-          {search && (
+          {filtered && (
             <div style={{ padding: "4px 6px" }}>
-              <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1.2,
-                color: "var(--text-3)", fontWeight: 600, padding: "4px 10px 4px" }}>
-                Results
-              </div>
-              {[...channels, ...dms]
-                .filter(r => roomLabel(r, user, userMap).toLowerCase().includes(search.toLowerCase()))
-                .map(r => (
-                  <RoomItem key={r.id} room={r} active={activeRoom?.id === r.id}
-                    label={roomLabel(r, user, userMap)}
-                    online={r.type === "dm" ? onlineSet.has(dmOtherId(r)) : null}
-                    unread={unread[r.id]} onClick={() => openRoom(r)} />
-                ))}
+              <div className="section-label" style={{ padding: "4px 10px 4px" }}>Results</div>
+              {filtered.map(r => (
+                <RoomRow key={r.id} r={r} active={activeRoom?.id === r.id}
+                  label={r.type === "channel" ? r.name : dmLabel(r)}
+                  online={r.type === "dm" ? onlineSet.has(Number(dmOtherId(r))) : null}
+                  unread={unread[r.id]} userMap={userMap} otherId={dmOtherId(r)}
+                  onClick={() => openRoom(r)} />
+              ))}
+              {!filtered.length && (
+                <div style={{ color: "var(--text-3)", fontSize: 12, padding: "6px 14px" }}>No results</div>
+              )}
             </div>
           )}
 
-          {!search && <>
+          {!filtered && <>
             {/* Channels */}
             <div style={{ padding: "6px 0 0" }}>
               <div className="section-header">
                 <span className="section-label">Channels</span>
-                <button className="icon-btn" onClick={() => setShowCh(true)} title="New channel">
-                  <Plus size={14} weight="bold" />
-                </button>
+                <button className="icon-btn" onClick={() => setShowCh(true)}><Plus size={14} weight="bold" /></button>
               </div>
               {channels.length === 0 && (
-                <div style={{ padding: "4px 18px 8px", fontSize: 11, color: "var(--text-3)" }}>
-                  No channels yet
-                </div>
+                <div style={{ padding: "3px 18px 8px", fontSize: 11, color: "var(--text-3)" }}>No channels yet</div>
               )}
               {channels.map(r => (
-                <RoomItem key={r.id} room={r} active={activeRoom?.id === r.id}
+                <RoomRow key={r.id} r={r} active={activeRoom?.id === r.id}
                   label={r.name} unread={unread[r.id]}
                   icon={<Hash size={13} color="var(--text-3)" />}
                   onClick={() => openRoom(r)} />
@@ -196,42 +194,18 @@ export default function Sidebar() {
             <div style={{ padding: "6px 0 0" }}>
               <div className="section-header">
                 <span className="section-label">Messages</span>
-                <button className="icon-btn" onClick={openDmModal} title="New message">
-                  <Plus size={14} weight="bold" />
-                </button>
+                <button className="icon-btn" onClick={openDmModal}><Plus size={14} weight="bold" /></button>
               </div>
               {dms.length === 0 && (
-                <div style={{ padding: "4px 18px 8px", fontSize: 11, color: "var(--text-3)" }}>
-                  No messages yet
-                </div>
+                <div style={{ padding: "3px 18px 8px", fontSize: 11, color: "var(--text-3)" }}>No messages yet</div>
               )}
               {dms.map(r => {
                 const otherId = dmOtherId(r);
-                const other   = userMap[otherId];
-                const online  = onlineSet.has(otherId);
+                const online  = onlineSet.has(Number(otherId));
                 return (
-                  <RoomItem key={r.id} room={r} active={activeRoom?.id === r.id}
-                    label={other?.display_name || other?.username || "DM"}
-                    online={online} unread={unread[r.id]}
-                    icon={
-                      <div style={{ position: "relative", width: 22, height: 22, flexShrink: 0 }}>
-                        <div style={{
-                          width: 22, height: 22, borderRadius: "50%",
-                          background: "linear-gradient(135deg, var(--accent), var(--accent2))",
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          fontSize: 9, fontWeight: 700, color: "#fff",
-                        }}>
-                          {(other?.display_name || other?.username || "?")[0].toUpperCase()}
-                        </div>
-                        <div style={{
-                          position: "absolute", bottom: 0, right: 0,
-                          width: 7, height: 7, borderRadius: "50%",
-                          background: online ? "var(--green)" : "var(--text-3)",
-                          border: "1.5px solid var(--bg-sidebar)",
-                          boxShadow: online ? "0 0 4px var(--green)" : "none",
-                        }} />
-                      </div>
-                    }
+                  <RoomRow key={r.id} r={r} active={activeRoom?.id === r.id}
+                    label={dmLabel(r)} online={online} unread={unread[r.id]}
+                    userMap={userMap} otherId={otherId}
                     onClick={() => openRoom(r)} />
                 );
               })}
@@ -240,57 +214,31 @@ export default function Sidebar() {
         </div>
 
         {/* Footer with popover */}
-        <div style={{ padding: "8px", borderTop: "1px solid var(--border)", position: "relative" }} ref={popRef}>
-          {/* Popover */}
+        <div style={{ borderTop: "1px solid var(--border)", position: "relative" }} ref={popRef}>
           {popover && (
             <div style={{
-              position: "absolute", bottom: "calc(100% + 6px)", left: 8, right: 8,
+              position: "absolute", bottom: "calc(100% + 4px)", left: 8, right: 8,
               background: "var(--bg-surface)", border: "1px solid var(--border)",
               borderRadius: "var(--radius)", boxShadow: "0 -8px 32px rgba(0,0,0,.5)",
               overflow: "hidden", zIndex: 50,
             }}>
-              <div style={{ padding: "10px 14px 6px", borderBottom: "1px solid var(--border)" }}>
+              <div style={{ padding: "10px 14px 8px", borderBottom: "1px solid var(--border)" }}>
                 <div style={{ fontSize: 13, fontWeight: 600 }}>{user?.display_name || user?.username}</div>
                 <div style={{ fontSize: 11, color: "var(--text-3)" }}>@{user?.username}</div>
               </div>
               {[
-                { icon: <Gear size={14} />,    label: "Settings",       action: () => { openSettings("account"); setPopover(false); } },
-                { icon: <Bell size={14} />,    label: "Notifications",  action: () => { openSettings("notifications"); setPopover(false); } },
-                { icon: <Palette size={14} />, label: "Appearance",     action: () => { openSettings("appearance"); setPopover(false); } },
-                { icon: <Lock size={14} />,    label: "Privacy",        action: () => { openSettings("privacy"); setPopover(false); } },
-                { icon: <Info size={14} />,    label: "About",          action: () => { openSettings("about"); setPopover(false); } },
+                { icon: <User size={14} />,    label: "Account",       page: "account" },
+                { icon: <Bell size={14} />,    label: "Notifications", page: "notifications" },
+                { icon: <Palette size={14} />, label: "Appearance",    page: "appearance" },
+                { icon: <Lock size={14} />,    label: "Privacy",       page: "privacy" },
+                { icon: <Info size={14} />,    label: "About",         page: "about" },
               ].map(item => (
-                <button key={item.label} onClick={item.action} style={{
-                  display: "flex", alignItems: "center", gap: 10,
-                  width: "100%", padding: "9px 14px",
-                  background: "transparent", border: "none",
-                  color: "var(--text-2)", cursor: "pointer",
-                  fontSize: 13, fontFamily: "var(--font-body)",
-                  textAlign: "left", transition: "var(--trans)",
-                }}
-                  onMouseEnter={e => e.currentTarget.style.background = "var(--bg-hover)"}
-                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-                  onTouchStart={e => e.currentTarget.style.background = "var(--bg-hover)"}
-                  onTouchEnd={e => e.currentTarget.style.background = "transparent"}
-                >
-                  <span style={{ color: "var(--text-3)" }}>{item.icon}</span>
-                  {item.label}
-                </button>
+                <PopItem key={item.label} icon={item.icon} label={item.label}
+                  onClick={() => { openSettings(item.page); setPopover(false); }} />
               ))}
               <div style={{ borderTop: "1px solid var(--border)" }}>
-                <button onClick={logout} style={{
-                  display: "flex", alignItems: "center", gap: 10,
-                  width: "100%", padding: "9px 14px",
-                  background: "transparent", border: "none",
-                  color: "var(--red)", cursor: "pointer",
-                  fontSize: 13, fontFamily: "var(--font-body)", textAlign: "left",
-                }}
-                  onMouseEnter={e => e.currentTarget.style.background = "rgba(224,92,92,.08)"}
-                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-                >
-                  <SignOut size={14} />
-                  Sign out
-                </button>
+                <PopItem icon={<SignOut size={14} />} label="Sign out"
+                  color="var(--red)" onClick={logout} />
               </div>
             </div>
           )}
@@ -298,12 +246,11 @@ export default function Sidebar() {
           {/* Account row */}
           <div onClick={() => setPopover(v => !v)} style={{
             display: "flex", alignItems: "center", gap: 9,
-            padding: "8px 10px", borderRadius: "var(--radius-sm)",
-            cursor: "pointer", transition: "var(--trans)",
+            padding: "10px 12px", cursor: "pointer", transition: "var(--trans)",
             background: popover ? "var(--bg-active)" : "transparent",
           }}
             onMouseEnter={e => { if (!popover) e.currentTarget.style.background = "var(--bg-hover)"; }}
-            onMouseLeave={e => { if (!popover) e.currentTarget.style.background = "transparent"; }}
+            onMouseLeave={e => { if (!popover) e.currentTarget.style.background = popover ? "var(--bg-active)" : "transparent"; }}
           >
             <div className="avatar-wrap">
               <Avatar user={user} size="md" />
@@ -311,15 +258,15 @@ export default function Sidebar() {
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="footer-name">{user?.display_name || user?.username}</div>
-              <div className="footer-status" style={{ color: "var(--green)" }}>● online</div>
+              <div style={{ fontSize: 10, color: "var(--green)" }}>● online</div>
             </div>
             <CaretDown size={13} color="var(--text-3)"
-              style={{ transform: popover ? "rotate(180deg)" : "rotate(0)", transition: "transform 200ms" }} />
+              style={{ transform: popover ? "rotate(180deg)" : "none", transition: "transform 200ms" }} />
           </div>
         </div>
       </div>
 
-      {/* Create channel modal */}
+      {/* Create channel */}
       <Modal open={showCh} onClose={() => setShowCh(false)} title="New Channel">
         <div className="form-group">
           <label className="label">Name</label>
@@ -338,16 +285,16 @@ export default function Sidebar() {
         </div>
       </Modal>
 
-      {/* New DM modal */}
+      {/* New DM */}
       <Modal open={showDm} onClose={() => setShowDm(false)} title="New Direct Message">
-        <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 300, overflowY: "auto" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 320, overflowY: "auto" }}>
           {allUsers.map(u => {
-            const online = onlineSet.has(u.id);
+            const online = onlineSet.has(Number(u.id));
             return (
               <div key={u.id} onClick={() => startDm(u.id)} style={{
                 display: "flex", alignItems: "center", gap: 10,
-                padding: "8px 10px", borderRadius: "var(--radius-sm)",
-                cursor: "pointer", transition: "var(--trans)",
+                padding: "9px 10px", borderRadius: "var(--radius-sm)",
+                cursor: "pointer",
               }}
                 onMouseEnter={e => e.currentTarget.style.background = "var(--bg-hover)"}
                 onMouseLeave={e => e.currentTarget.style.background = ""}>
@@ -381,13 +328,51 @@ export default function Sidebar() {
   );
 }
 
-function RoomItem({ room, active, label, icon, online, unread, onClick }) {
+function RoomRow({ r, active, label, icon, online, unread, userMap, otherId, onClick }) {
   return (
     <div className={`room-item${active ? " active" : ""}`} onClick={onClick}>
-      {icon && <span style={{ flexShrink: 0, display: "flex", alignItems: "center" }}>{icon}</span>}
+      {icon
+        ? <span style={{ flexShrink: 0, display: "flex", alignItems: "center" }}>{icon}</span>
+        : otherId && userMap
+        ? <div style={{ position: "relative", width: 20, height: 20, flexShrink: 0 }}>
+            <div style={{
+              width: 20, height: 20, borderRadius: "50%",
+              background: "linear-gradient(135deg, var(--accent), var(--accent2))",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 9, fontWeight: 700, color: "#fff",
+            }}>
+              {(label || "?")[0].toUpperCase()}
+            </div>
+            <div style={{
+              position: "absolute", bottom: 0, right: 0,
+              width: 7, height: 7, borderRadius: "50%",
+              background: online ? "var(--green)" : "var(--text-3)",
+              border: "1.5px solid var(--bg-sidebar)",
+            }} />
+          </div>
+        : null
+      }
       <span className="room-item-name">{label}</span>
       {!!unread && <div className="unread-badge">{unread > 99 ? "99+" : unread}</div>}
     </div>
+  );
+}
+
+function PopItem({ icon, label, color, onClick }) {
+  return (
+    <button onClick={onClick} style={{
+      display: "flex", alignItems: "center", gap: 10,
+      width: "100%", padding: "9px 14px",
+      background: "transparent", border: "none",
+      color: color || "var(--text-2)", cursor: "pointer",
+      fontSize: 13, fontFamily: "var(--font-body)", textAlign: "left",
+    }}
+      onMouseEnter={e => e.currentTarget.style.background = "var(--bg-hover)"}
+      onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+    >
+      <span style={{ color: color || "var(--text-3)", flexShrink: 0 }}>{icon}</span>
+      {label}
+    </button>
   );
 }
 
@@ -396,8 +381,7 @@ function ConnBadge() {
   useEffect(() => {
     const t = setInterval(async () => {
       const { getSocket } = await import("../lib/socket");
-      const s = getSocket();
-      setConnected(!!s?.connected);
+      setConnected(!!getSocket()?.connected);
     }, 1000);
     return () => clearInterval(t);
   }, []);
@@ -409,9 +393,7 @@ function ConnBadge() {
       border: `1px solid ${connected ? "rgba(78,203,113,.3)" : "rgba(224,92,92,.3)"}`,
       color: connected ? "var(--green)" : "var(--red)",
     }}>
-      {connected
-        ? <WifiHigh size={11} weight="bold" />
-        : <WifiNone size={11} weight="bold" />}
+      {connected ? <WifiHigh size={11} weight="bold" /> : <WifiNone size={11} weight="bold" />}
       {connected ? "live" : "off"}
     </div>
   );

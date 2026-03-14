@@ -1,289 +1,377 @@
 import React, { useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import { X, User, Bell, Palette, Lock, Info, Key, Phone, ImageSquare } from "@phosphor-icons/react";
 import useStore from "../../lib/store";
-import { users as usersApi } from "../../lib/api";
+import { users as usersApi, auth } from "../../lib/api";
 
-const NAV = [
-  { id: "account",     icon: "👤", label: "Account" },
-  { id: "appearance",  icon: "🎨", label: "Appearance" },
-  { id: "chat",        icon: "💬", label: "Chat" },
-  { id: "notifs",      icon: "🔔", label: "Notifications" },
-  { id: "privacy",     icon: "🔒", label: "Privacy" },
-  { id: "rooms",       icon: "📂", label: "Rooms & DMs" },
-  { id: "about",       icon: "ℹ️",  label: "About" },
+const TABS = [
+  { id: "account",       label: "Account",      icon: <User size={14} /> },
+  { id: "appearance",    label: "Appearance",   icon: <Palette size={14} /> },
+  { id: "notifications", label: "Notifs",       icon: <Bell size={14} /> },
+  { id: "privacy",       label: "Privacy",      icon: <Lock size={14} /> },
+  { id: "about",         label: "About",        icon: <Info size={14} /> },
 ];
 
-const PALETTES = [
-  { id: "default",        label: "Default",        bg: "#0d0f14", accent: "#4f8ef7" },
-  { id: "midnight_blue",  label: "Midnight Blue",  bg: "#080e1a", accent: "#5baaf7" },
-  { id: "grape_soda",     label: "Grape Soda",     bg: "#100a1c", accent: "#a855f7" },
-  { id: "forest_moss",    label: "Forest Moss",    bg: "#080e0a", accent: "#4ade80" },
-  { id: "sunset_ember",   label: "Sunset Ember",   bg: "#130a04", accent: "#f97316" },
-  { id: "ocean_teal",     label: "Ocean Teal",     bg: "#040e0e", accent: "#2dd4bf" },
-  { id: "bubblegum",      label: "Bubblegum",      bg: "#130810", accent: "#f472b6" },
-  { id: "solarized_sand", label: "Solarized Sand", bg: "#fdf6e3", accent: "#b58900" },
+const THEMES = [
+  { id: "dark",        label: "Dark",         bg: "#0d0f14", accent: "#4f8ef7", accent2: "#7c6af7" },
+  { id: "darker",      label: "Darker",       bg: "#050608", accent: "#7c6af7", accent2: "#4f8ef7" },
+  { id: "neon-purple", label: "Neon Purple",  bg: "#0a0612", accent: "#c060ff", accent2: "#8040e0" },
+  { id: "vampire",     label: "Vampire",      bg: "#0e0608", accent: "#e02040", accent2: "#c01830" },
+  { id: "whatsapp",    label: "WhatsApp",     bg: "#0a120e", accent: "#25d366", accent2: "#128c4a" },
+  { id: "light",       label: "Light",        bg: "#f0f2f8", accent: "#4f8ef7", accent2: "#7c6af7" },
+  { id: "cyberpunk",   label: "Cyberpunk",    bg: "#0a0a06", accent: "#f0f000", accent2: "#c0c000" },
+  { id: "deepsea",     label: "Deep Sea",     bg: "#060e18", accent: "#0090ff", accent2: "#0060d0" },
+  { id: "instagram",   label: "Instagram",    bg: "#0a080e", accent: "#e1306c", accent2: "#833ab4" },
+  { id: "forest",      label: "Forest",       bg: "#0a1008", accent: "#4ec871", accent2: "#2ea050" },
+  { id: "rose",        label: "Rose",         bg: "#12080e", accent: "#f76f8e", accent2: "#e04878" },
+  { id: "midnight",    label: "Midnight",     bg: "#0a0e1a", accent: "#4f8ef7", accent2: "#7c6af7" },
+];
+
+const AVATAR_COLORS = [
+  ["#4f8ef7","#7c6af7"], ["#e1306c","#833ab4"], ["#25d366","#128c4a"],
+  ["#e02040","#c01830"], ["#c060ff","#8040e0"], ["#0090ff","#0060d0"],
+  ["#f76f8e","#e04878"], ["#f0f000","#c0c000"], ["#4ec871","#2ea050"],
+  ["#ffa030","#e07010"], ["#00d4a0","#0090c0"], ["#f5a623","#d4850a"],
 ];
 
 export default function SettingsModal() {
-  const { settingsPage, closeSettings, user, prefs, privacy, theme,
-          setPrefs, setPrivacy, setTheme, flags } = useStore();
-  const [page, setPage] = useState(settingsPage);
-  const [profileForm, setProfileForm] = useState({
-    display_name: user?.display_name || "",
-    bio: user?.bio || "",
-    email: user?.email || "",
-  });
-  const [saved, setSaved] = useState(false);
+  const { closeSettings, settingsPage, user, setAuth, token } = useStore();
+  const [tab, setTab]             = useState(settingsPage || "account");
+  const [displayName, setDisplayName] = useState(user?.display_name || "");
+  const [bio, setBio]             = useState(user?.bio || "");
+  const [phone, setPhone]         = useState(user?.phone || "");
+  const [oldPw, setOldPw]         = useState("");
+  const [newPw, setNewPw]         = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const [avatarColor, setAvatarColor] = useState(0);
+  const [saved, setSaved]         = useState("");
+  const [theme, setTheme]         = useState(
+    () => localStorage.getItem("lanchat_theme") || "dark"
+  );
 
-  useEffect(() => { setPage(settingsPage); }, [settingsPage]);
+  useEffect(() => { setTab(settingsPage || "account"); }, [settingsPage]);
 
-  // Load prefs/privacy on mount
+  function applyTheme(t) {
+    setTheme(t.id);
+    localStorage.setItem("lanchat_theme", t.id);
+    document.documentElement.setAttribute("data-theme", t.id);
+
+    const vars = {
+      dark:         { base:"#0d0f14", surface:"#13161e", sidebar:"#0f1117", raised:"#1a1d26", hover:"#1e2130", active:"#232638", border:"#2a2d3a", t1:"#e8eaf0", t2:"#9ba3b8", t3:"#5a6070", accent:"#4f8ef7", accent2:"#7c6af7", green:"#4ec871", red:"#e05c5c" },
+      darker:       { base:"#050608", surface:"#0a0b0f", sidebar:"#070809", raised:"#0f1015", hover:"#13141a", active:"#171820", border:"#1e2028", t1:"#dde0ea", t2:"#8890a8", t3:"#484e60", accent:"#7c6af7", accent2:"#4f8ef7", green:"#4ec871", red:"#e05c5c" },
+      "neon-purple":{ base:"#0a0612", surface:"#110a1e", sidebar:"#0d0818", raised:"#180f28", hover:"#1e1330", active:"#251838", border:"#301e4a", t1:"#ecdeff", t2:"#a87fd4", t3:"#5e3d80", accent:"#c060ff", accent2:"#8040e0", green:"#50e0a0", red:"#ff4080" },
+      vampire:      { base:"#0e0608", surface:"#180a0c", sidebar:"#120608", raised:"#200c10", hover:"#2a1015", active:"#32141a", border:"#4a1c22", t1:"#f5dde0", t2:"#c47880", t3:"#7a3840", accent:"#e02040", accent2:"#c01830", green:"#40e080", red:"#ff6080" },
+      whatsapp:     { base:"#0a120e", surface:"#111a14", sidebar:"#0d1610", raised:"#162018", hover:"#1c2a1e", active:"#203024", border:"#264030", t1:"#d8f0e0", t2:"#6daa80", t3:"#3a6048", accent:"#25d366", accent2:"#128c4a", green:"#25d366", red:"#e05c5c" },
+      light:        { base:"#f0f2f8", surface:"#ffffff", sidebar:"#e8eaf2", raised:"#eaecf4", hover:"#dfe1ee", active:"#d8daea", border:"#c8cad8", t1:"#1a1c28", t2:"#4a4e68", t3:"#8890a8", accent:"#4f8ef7", accent2:"#7c6af7", green:"#22a84a", red:"#d03030" },
+      cyberpunk:    { base:"#0a0a06", surface:"#111108", sidebar:"#0d0d07", raised:"#18180a", hover:"#20200e", active:"#282810", border:"#383810", t1:"#f0f060", t2:"#a8a840", t3:"#606020", accent:"#f0f000", accent2:"#c0c000", green:"#00ff80", red:"#ff4040" },
+      deepsea:      { base:"#060e18", surface:"#0a1420", sidebar:"#080f1a", raised:"#0e1c2c", hover:"#122234", active:"#162840", border:"#1e3450", t1:"#c8e8ff", t2:"#6090c0", t3:"#304868", accent:"#0090ff", accent2:"#0060d0", green:"#00d4a0", red:"#ff4060" },
+      instagram:    { base:"#0a080e", surface:"#120f18", sidebar:"#0e0b14", raised:"#1a1622", hover:"#211c2c", active:"#282234", border:"#342844", t1:"#f0eaf8", t2:"#a090c0", t3:"#604878", accent:"#e1306c", accent2:"#833ab4", green:"#4ec871", red:"#ff3040" },
+      forest:       { base:"#0a1008", surface:"#111a0e", sidebar:"#0d1409", raised:"#172010", hover:"#1e2a16", active:"#24321a", border:"#2e4020", t1:"#d8f0cc", t2:"#78a860", t3:"#406030", accent:"#4ec871", accent2:"#2ea050", green:"#4ec871", red:"#e05c5c" },
+      rose:         { base:"#12080e", surface:"#1c0e16", sidebar:"#160a12", raised:"#22101a", hover:"#2c1422", active:"#341828", border:"#4a1e34", t1:"#f8dde8", t2:"#c870a0", t3:"#784060", accent:"#f76f8e", accent2:"#e04878", green:"#50e0b0", red:"#ff4060" },
+      midnight:     { base:"#0a0e1a", surface:"#0f1420", sidebar:"#0c1018", raised:"#141c2c", hover:"#182234", active:"#1e2840", border:"#243048", t1:"#d0d8f0", t2:"#7080b0", t3:"#384060", accent:"#4f8ef7", accent2:"#7c6af7", green:"#4ec871", red:"#e05c5c" },
+    };
+    const v = vars[t.id] || vars.dark;
+    const r = document.documentElement;
+    r.style.setProperty("--bg-base",     v.base);
+    r.style.setProperty("--bg-surface",  v.surface);
+    r.style.setProperty("--bg-sidebar",  v.sidebar);
+    r.style.setProperty("--bg-raised",   v.raised);
+    r.style.setProperty("--bg-hover",    v.hover);
+    r.style.setProperty("--bg-active",   v.active);
+    r.style.setProperty("--border",      v.border);
+    r.style.setProperty("--text-1",      v.t1);
+    r.style.setProperty("--text-2",      v.t2);
+    r.style.setProperty("--text-3",      v.t3);
+    r.style.setProperty("--accent",      v.accent);
+    r.style.setProperty("--accent2",     v.accent2);
+    r.style.setProperty("--accent-dim",  v.accent + "44");
+    r.style.setProperty("--accent-glow", v.accent + "22");
+    r.style.setProperty("--green",       v.green);
+    r.style.setProperty("--red",         v.red);
+    r.style.setProperty("--receipt-sent",      v.t3);
+    r.style.setProperty("--receipt-delivered", "#f5a623");
+    r.style.setProperty("--receipt-seen",      v.accent);
+  }
+
   useEffect(() => {
-    usersApi.getPrefs().then(setPrefs).catch(() => {});
-    usersApi.getPrivacy().then(setPrivacy).catch(() => {});
-    usersApi.getTheme().then(setTheme).catch(() => {});
+    const saved = localStorage.getItem("lanchat_theme") || "dark";
+    const t = THEMES.find(x => x.id === saved);
+    if (t) applyTheme(t);
   }, []);
 
-  async function saveProfile() {
-    await usersApi.patchProfile(profileForm).catch(() => {});
-    setSaved(true); setTimeout(() => setSaved(false), 2000);
+  async function saveAccount() {
+    try {
+      const updated = await usersApi.updateMe({ display_name: displayName, bio, phone });
+      setAuth(updated, token);
+      setSaved("account");
+      setTimeout(() => setSaved(""), 2500);
+    } catch (_) {}
   }
 
-  async function togglePref(key) {
-    const next = { ...prefs, [key]: !prefs[key] };
-    setPrefs(next);
-    await usersApi.patchPrefs({ [key]: !prefs[key] }).catch(() => {});
+  async function changePassword() {
+    if (newPw !== confirmPw) { setSaved("pw_mismatch"); setTimeout(() => setSaved(""), 3000); return; }
+    try {
+      await auth.changePassword({ old_password: oldPw, new_password: newPw });
+      setSaved("pw"); setTimeout(() => setSaved(""), 2500);
+      setOldPw(""); setNewPw(""); setConfirmPw("");
+    } catch (_) { setSaved("pw_err"); setTimeout(() => setSaved(""), 3000); }
   }
 
-  async function togglePrivacy(key) {
-    const next = { ...privacy, [key]: !privacy[key] };
-    setPrivacy(next);
-    await usersApi.patchPrivacy({ [key]: !privacy[key] }).catch(() => {});
-  }
-
-  async function pickTheme(mode, palette) {
-    const t = { mode: mode ?? theme.mode, palette: palette ?? theme.palette };
-    setTheme(t);
-    await usersApi.patchTheme(t).catch(() => {});
-  }
+  const initials = (user?.display_name || user?.username || "?")[0].toUpperCase();
 
   return (
-    <motion.div className="overlay"
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      onClick={closeSettings}>
-      <motion.div
-        initial={{ scale: .96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: .96, opacity: 0 }} transition={{ duration: .18 }}
-        style={{ width: "min(720px, 96vw)", height: "min(560px, 90vh)",
-          background: "var(--bg-surface)", borderRadius: "var(--radius-xl)",
-          border: "1px solid var(--border)", overflow: "hidden",
-          display: "flex", boxShadow: "0 28px 90px rgba(0,0,0,.6)" }}
-        onClick={e => e.stopPropagation()}>
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,.75)",
+      backdropFilter: "blur(6px)", display: "flex",
+      alignItems: "center", justifyContent: "center", zIndex: 200, padding: 12,
+    }} onClick={closeSettings}>
+      <div style={{
+        background: "var(--bg-surface)", border: "1px solid var(--border)",
+        borderRadius: "var(--radius-xl)", width: "100%", maxWidth: 520,
+        maxHeight: "92dvh", display: "flex", flexDirection: "column",
+        boxShadow: "0 24px 80px rgba(0,0,0,.7)", overflow: "hidden",
+      }} onClick={e => e.stopPropagation()}>
 
-        {/* Nav */}
-        <div className="settings-nav">
-          <div style={{ fontFamily: "var(--font-display)", fontSize: 13, fontWeight: 700,
-            padding: "0 10px 14px", color: "var(--text-3)", letterSpacing: .5 }}>
-            SETTINGS
+        {/* Header */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "16px 20px 0", flexShrink: 0,
+        }}>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 17, fontWeight: 700, color: "var(--text-1)" }}>
+            Settings
           </div>
-          {NAV.map(n => (
-            <div key={n.id} className={`settings-nav-item${page === n.id ? " active" : ""}`}
-              onClick={() => setPage(n.id)}>
-              <span>{n.icon}</span> {n.label}
-            </div>
+          <button className="icon-btn" onClick={closeSettings}><X size={16} /></button>
+        </div>
+
+        {/* Horizontal tabs */}
+        <div style={{
+          display: "flex", padding: "10px 16px 0",
+          borderBottom: "1px solid var(--border)", flexShrink: 0,
+          overflowX: "auto", scrollbarWidth: "none", gap: 0,
+        }}>
+          {TABS.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)} style={{
+              display: "flex", alignItems: "center", gap: 5,
+              padding: "8px 11px", background: "transparent", border: "none",
+              cursor: "pointer", fontSize: 12, fontFamily: "var(--font-body)",
+              color: tab === t.id ? "var(--accent)" : "var(--text-3)",
+              borderBottom: `2px solid ${tab === t.id ? "var(--accent)" : "transparent"}`,
+              marginBottom: -1, whiteSpace: "nowrap", transition: "var(--trans)",
+              fontWeight: tab === t.id ? 600 : 400,
+            }}>
+              {t.icon} {t.label}
+            </button>
           ))}
         </div>
 
         {/* Content */}
-        <div className="settings-content">
-          <button className="icon-btn" style={{ float: "right", marginBottom: 8 }}
-            onClick={closeSettings}>✕</button>
+        <div style={{ flex: 1, overflowY: "auto", padding: "18px 20px" }}>
 
           {/* ── Account ── */}
-          {page === "account" && (
-            <>
-              <div className="settings-section-title">Account</div>
+          {tab === "account" && (
+            <div>
+              <div style={{ textAlign: "center", marginBottom: 20 }}>
+                <div style={{
+                  width: 72, height: 72, borderRadius: "50%", margin: "0 auto 10px",
+                  background: `linear-gradient(135deg, ${AVATAR_COLORS[avatarColor][0]}, ${AVATAR_COLORS[avatarColor][1]})`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 26, fontWeight: 700, color: "#fff",
+                  boxShadow: `0 0 24px ${AVATAR_COLORS[avatarColor][0]}44`,
+                }}>
+                  {initials}
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)" }}>{user?.display_name || user?.username}</div>
+                <div style={{ fontSize: 11, color: "var(--text-3)" }}>@{user?.username}</div>
+              </div>
+
+              <div style={{ marginBottom: 16 }}>
+                <div className="label">Avatar Color</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {AVATAR_COLORS.map(([a, b], i) => (
+                    <div key={i} onClick={() => setAvatarColor(i)} style={{
+                      width: 28, height: 28, borderRadius: "50%",
+                      background: `linear-gradient(135deg, ${a}, ${b})`,
+                      cursor: "pointer",
+                      border: avatarColor === i ? "2px solid var(--text-1)" : "2px solid transparent",
+                      boxShadow: avatarColor === i ? `0 0 10px ${a}88` : "none",
+                      transition: "var(--trans)",
+                    }} />
+                  ))}
+                </div>
+              </div>
+
               <div className="form-group">
                 <label className="label">Display Name</label>
-                <input className="input" value={profileForm.display_name}
-                  onChange={e => setProfileForm(f => ({ ...f, display_name: e.target.value }))} />
+                <input className="input" value={displayName}
+                  onChange={e => setDisplayName(e.target.value)} placeholder="Your display name" />
               </div>
               <div className="form-group">
-                <label className="label">Bio</label>
-                <input className="input" value={profileForm.bio}
-                  onChange={e => setProfileForm(f => ({ ...f, bio: e.target.value }))} />
+                <label className="label">Username</label>
+                <input className="input" value={user?.username} disabled />
               </div>
               <div className="form-group">
-                <label className="label">Email</label>
-                <input className="input" type="email" value={profileForm.email}
-                  onChange={e => setProfileForm(f => ({ ...f, email: e.target.value }))} />
+                <label className="label">Bio / Status</label>
+                <input className="input" value={bio}
+                  onChange={e => setBio(e.target.value)} placeholder="What's on your mind?" />
               </div>
-              <button className="btn btn-primary" onClick={saveProfile}>
-                {saved ? "✓ Saved" : "Save Changes"}
+              <div className="form-group">
+                <label className="label">Phone Number</label>
+                <input className="input" value={phone}
+                  onChange={e => setPhone(e.target.value)}
+                  placeholder="+27 000 000 0000" type="tel" />
+              </div>
+
+              <button className="btn btn-primary btn-full" onClick={saveAccount}>
+                {saved === "account" ? "✓ Saved!" : "Save Changes"}
               </button>
-              <div style={{ marginTop: 24, borderTop: "1px solid var(--border)", paddingTop: 16 }}>
-                <button className="btn btn-ghost"
-                  onClick={() => { usersApi.logout?.(); import("../../lib/api").then(m => { m.clearToken(); useStore.getState().clearAuth(); }); }}>
-                  Sign Out
+
+              <div style={{ marginTop: 22, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: "var(--text-1)" }}>
+                  Change Password
+                </div>
+                <div className="form-group">
+                  <label className="label">Current Password</label>
+                  <input className="input" type="password" value={oldPw}
+                    onChange={e => setOldPw(e.target.value)} placeholder="••••••••" />
+                </div>
+                <div className="form-group">
+                  <label className="label">New Password</label>
+                  <input className="input" type="password" value={newPw}
+                    onChange={e => setNewPw(e.target.value)} placeholder="••••••••" />
+                </div>
+                <div className="form-group">
+                  <label className="label">Confirm New Password</label>
+                  <input className="input" type="password" value={confirmPw}
+                    onChange={e => setConfirmPw(e.target.value)} placeholder="••••••••" />
+                </div>
+                {saved === "pw_mismatch" && (
+                  <div style={{ color: "var(--red)", fontSize: 12, marginBottom: 8 }}>Passwords don't match</div>
+                )}
+                {saved === "pw_err" && (
+                  <div style={{ color: "var(--red)", fontSize: 12, marginBottom: 8 }}>Incorrect current password</div>
+                )}
+                <button className="btn btn-ghost btn-full" onClick={changePassword}>
+                  {saved === "pw" ? "✓ Password Changed!" : "Change Password"}
                 </button>
               </div>
-            </>
+            </div>
           )}
 
           {/* ── Appearance ── */}
-          {page === "appearance" && (
-            <>
-              <div className="settings-section-title">Appearance</div>
-
-              <div className="setting-row">
-                <div>
-                  <div className="setting-label">Theme Mode</div>
-                  <div className="setting-sub">Follow device, or pick manually</div>
-                </div>
-                <div style={{ display: "flex", gap: 6 }}>
-                  {["system", "dark", "light"].map(m => (
-                    <button key={m} className={`btn ${theme.mode === m ? "btn-primary" : "btn-ghost"}`}
-                      style={{ padding: "5px 11px", fontSize: 11 }}
-                      onClick={() => pickTheme(m, null)}>
-                      {m === "system" ? "Default" : m.charAt(0).toUpperCase() + m.slice(1)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div style={{ marginTop: 18 }}>
-                <div className="setting-label" style={{ marginBottom: 10 }}>Colour Palette</div>
-                <div className="palette-grid">
-                  {PALETTES.map(p => (
-                    <div key={p.id} title={p.label}
-                      className={`palette-chip${theme.palette === p.id ? " selected" : ""}`}
-                      style={{ background: p.bg, border: `2px solid ${theme.palette === p.id ? p.accent : "transparent"}` }}
-                      onClick={() => pickTheme(null, p.id)}>
-                      <div style={{ height: "50%", background: p.accent, opacity: .8 }} />
-                      <div style={{ padding: "3px 5px", fontSize: 9, color: p.bg === "#fdf6e3" ? "#073642" : "#fff",
-                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {p.label}
-                      </div>
+          {tab === "appearance" && (
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 14, color: "var(--text-1)" }}>Theme</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+                {THEMES.map(t => (
+                  <div key={t.id} onClick={() => applyTheme(t)} style={{
+                    cursor: "pointer", borderRadius: "var(--radius-sm)", overflow: "hidden",
+                    border: `2px solid ${theme === t.id ? "var(--accent)" : "var(--border)"}`,
+                    transition: "var(--trans)",
+                    boxShadow: theme === t.id ? "0 0 0 3px var(--accent-glow)" : "none",
+                  }}>
+                    <div style={{
+                      height: 52, background: t.bg,
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                    }}>
+                      <div style={{ width: 18, height: 18, borderRadius: "50%", background: t.accent, boxShadow: `0 0 8px ${t.accent}` }} />
+                      <div style={{ width: 14, height: 14, borderRadius: "50%", background: t.accent2, opacity: .7 }} />
                     </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="setting-row" style={{ marginTop: 18 }}>
-                <div>
-                  <div className="setting-label">Reduce Motion</div>
-                  <div className="setting-sub">Fewer animations</div>
-                </div>
-                <button className={`toggle${prefs.reduce_motion ? " on" : ""}`}
-                  onClick={() => togglePref("reduce_motion")} />
-              </div>
-            </>
-          )}
-
-          {/* ── Chat ── */}
-          {page === "chat" && (
-            <>
-              <div className="settings-section-title">Chat</div>
-              {[
-                { key: "enter_to_send",      label: "Enter to send",              sub: "Press Enter to send, Shift+Enter for newline" },
-                { key: "typing_indicators",  label: "Typing indicators",          sub: "Show when others are typing" },
-                { key: "group_consecutive",  label: "Group consecutive messages", sub: "Collapse messages from same sender within 5 min" },
-              ].map(({ key, label, sub }) => (
-                <div key={key} className="setting-row">
-                  <div>
-                    <div className="setting-label">{label}</div>
-                    <div className="setting-sub">{sub}</div>
+                    <div style={{
+                      padding: "4px 6px", background: "var(--bg-raised)",
+                      fontSize: 10, textAlign: "center", color: "var(--text-2)",
+                    }}>{t.label}</div>
                   </div>
-                  <button className={`toggle${prefs[key] !== false ? " on" : ""}`}
-                    onClick={() => togglePref(key)} />
-                </div>
-              ))}
-            </>
+                ))}
+              </div>
+            </div>
           )}
 
           {/* ── Notifications ── */}
-          {page === "notifs" && (
-            <>
-              <div className="settings-section-title">Notifications & Sounds</div>
+          {tab === "notifications" && (
+            <div style={{ display: "flex", flexDirection: "column" }}>
               {[
-                { key: "notification_sounds", label: "Sound notifications", sub: "Play a sound for new messages" },
-              ].map(({ key, label, sub }) => (
-                <div key={key} className="setting-row">
-                  <div>
-                    <div className="setting-label">{label}</div>
-                    <div className="setting-sub">{sub}</div>
-                  </div>
-                  <button className={`toggle${prefs[key] !== false ? " on" : ""}`}
-                    onClick={() => togglePref(key)} />
-                </div>
-              ))}
-            </>
+                { label: "Message banners",    sub: "Show banner when message arrives",      defaultOn: true },
+                { label: "Online alerts",      sub: "When someone comes online",             defaultOn: true },
+                { label: "Sound on message",   sub: "Play notification sound",               defaultOn: false },
+                { label: "Mention alerts",     sub: "When you're @mentioned in a group",     defaultOn: true },
+              ].map(item => <ToggleRow key={item.label} {...item} />)}
+            </div>
           )}
 
           {/* ── Privacy ── */}
-          {page === "privacy" && (
-            <>
-              <div className="settings-section-title">Privacy</div>
-              <div className="setting-row">
-                <div>
-                  <div className="setting-label">Send read receipts</div>
-                  <div className="setting-sub">If off, others see •• but not •••</div>
-                </div>
-                <button className={`toggle${privacy.send_read_receipts !== false ? " on" : ""}`}
-                  onClick={() => togglePrivacy("send_read_receipts")} />
-              </div>
-              <div className="setting-row">
-                <div>
-                  <div className="setting-label">Last seen visibility</div>
-                  <div className="setting-sub">Who can see when you were last active</div>
-                </div>
-                <div style={{ display: "flex", gap: 5 }}>
-                  {["everyone", "nobody"].map(v => (
-                    <button key={v} className={`btn ${privacy.last_seen_visibility === v ? "btn-primary" : "btn-ghost"}`}
-                      style={{ padding: "5px 10px", fontSize: 11 }}
-                      onClick={async () => {
-                        setPrivacy({ ...privacy, last_seen_visibility: v });
-                        await usersApi.patchPrivacy({ last_seen_visibility: v }).catch(() => {});
-                      }}>
-                      {v.charAt(0).toUpperCase() + v.slice(1)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* ── Rooms ── */}
-          {page === "rooms" && (
-            <>
-              <div className="settings-section-title">Rooms & DMs</div>
-              <div style={{ color: "var(--text-3)", fontSize: 13 }}>
-                Room-specific settings (mute, notifications) appear when you right-click a room in the sidebar.
-              </div>
-            </>
+          {tab === "privacy" && (
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              {[
+                { label: "Show online status",    sub: "Others can see when you're online",    defaultOn: true },
+                { label: "Read receipts",         sub: "Show when you've seen messages",       defaultOn: true },
+                { label: "Typing indicator",      sub: "Show when you're typing",              defaultOn: true },
+                { label: "Phone number visible",  sub: "Allow others to see your number",      defaultOn: false },
+              ].map(item => <ToggleRow key={item.label} {...item} />)}
+            </div>
           )}
 
           {/* ── About ── */}
-          {page === "about" && (
-            <>
-              <div className="settings-section-title">About</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {[["App", "LAN Chat"], ["Version", "1.0.0"], ["Build", "local"]].map(([k, v]) => (
-                  <div key={k} className="setting-row">
-                    <span className="setting-label" style={{ textTransform: "none", fontSize: 13 }}>{k}</span>
-                    <span style={{ color: "var(--text-2)", fontSize: 13 }}>{v}</span>
+          {tab === "about" && (
+            <div style={{ textAlign: "center", padding: "10px 0" }}>
+              <div style={{
+                width: 64, height: 64, borderRadius: 16, margin: "0 auto 14px",
+                background: "linear-gradient(135deg, var(--accent), var(--accent2))",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 28, boxShadow: "0 0 32px var(--accent-glow)",
+              }}>⬡</div>
+              <div style={{ fontFamily: "var(--font-display)", fontSize: 20, fontWeight: 800, marginBottom: 4, color: "var(--text-1)" }}>
+                LAN Chat
+              </div>
+              <div style={{ color: "var(--text-3)", fontSize: 12, marginBottom: 4 }}>
+                v1.0.0 — Local Network Messenger
+              </div>
+              <div style={{ color: "var(--accent)", fontSize: 12, fontWeight: 600, marginBottom: 20 }}>
+                Made by LethaboK
+              </div>
+              <div style={{
+                background: "var(--bg-raised)", border: "1px solid var(--border)",
+                borderRadius: "var(--radius)", padding: "14px 16px",
+                fontSize: 12, textAlign: "left", display: "flex", flexDirection: "column", gap: 10,
+              }}>
+                {[
+                  ["Frontend",   "React + Vite"],
+                  ["Realtime",   "Node.js + Socket.IO"],
+                  ["API",        "Python Flask"],
+                  ["Storage",    "JSON files (no DB)"],
+                  ["Auth",       "HMAC-SHA256 tokens"],
+                  ["Icons",      "Phosphor Icons"],
+                  ["Platform",   "Termux / Android"],
+                  ["Author",     "LethaboK"],
+                ].map(([k, v]) => (
+                  <div key={k} style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ color: "var(--text-3)" }}>{k}</span>
+                    <span style={{ fontWeight: 500, color: "var(--text-1)" }}>{v}</span>
                   </div>
                 ))}
-                {flags?.backup_button && (
-                  <button className="btn btn-ghost" style={{ marginTop: 12, alignSelf: "flex-start" }}>
-                    💾 Create Backup
-                  </button>
-                )}
               </div>
-            </>
+              <div style={{ marginTop: 16, fontSize: 11, color: "var(--text-3)", lineHeight: 1.8 }}>
+                Built for private LAN/hotspot use only.{"\n"}
+                No data leaves your network.
+              </div>
+            </div>
           )}
         </div>
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
+  );
+}
+
+function ToggleRow({ label, sub, defaultOn = false }) {
+  const [on, setOn] = useState(defaultOn);
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", justifyContent: "space-between",
+      padding: "12px 0", borderBottom: "1px solid var(--border)",
+    }}>
+      <div>
+        <div style={{ fontSize: 13, color: "var(--text-1)" }}>{label}</div>
+        {sub && <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>{sub}</div>}
+      </div>
+      <button className={`toggle${on ? " on" : ""}`} onClick={() => setOn(v => !v)} />
+    </div>
   );
 }
