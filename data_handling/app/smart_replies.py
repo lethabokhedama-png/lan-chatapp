@@ -32,7 +32,8 @@ def get_smart_replies(uid):
     seen, result = set(), []
     for s in suggestions:
         if s not in seen:
-            seen.add(s); result.append(s)
+            seen.add(s)
+            result.append(s)
         if len(result) >= 5:
             break
     return jsonify({"suggestions": result})
