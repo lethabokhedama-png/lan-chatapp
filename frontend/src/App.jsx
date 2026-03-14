@@ -9,8 +9,6 @@ import Toast, { showNotification, showToast } from "./ui/Toast";
 import Loader from "./Loader";
 import Permissions from "./Permissions";
 
-const PERMS_KEY = "lanchat_perms_done";
-
 export default function App() {
   const {
     user, setAuth, setUserMap, setOnline, setOffline, setOnlineList,
@@ -18,29 +16,43 @@ export default function App() {
     settingsOpen, addUnread,
   } = useStore();
 
-  const [booting, setBooting]   = useState(true);
+  const [booting,   setBooting]   = useState(true);
   const [showPerms, setShowPerms] = useState(false);
 
   useEffect(() => {
     async function boot() {
-      // Show permissions on first ever launch
-      if (!localStorage.getItem(PERMS_KEY)) {
+      // Check if this device needs to show permissions
+      const permsGranted = localStorage.getItem("lanchat_perms_granted");
+      if (!permsGranted) {
         setShowPerms(true);
+      } else {
+        // Re-check actual browser state — prompt again if revoked
+        try {
+          const mic   = await navigator.permissions?.query({ name: "microphone" });
+          const notif = typeof Notification !== "undefined" ? Notification.permission : "granted";
+          if (mic?.state === "denied" || notif === "default") {
+            setShowPerms(true);
+          }
+        } catch (_) {}
       }
 
+      // Restore session
       const t = getToken();
-      if (!t) { setBooting(false); return; }
-      try {
-        const u = await auth.me();
-        setAuth(u, t);
-      } catch (_) { clearToken(); }
+      if (t) {
+        try {
+          const u = await auth.me();
+          setAuth(u, t);
+        } catch (_) {
+          clearToken();
+        }
+      }
       setBooting(false);
     }
     boot();
   }, []);
 
   function onPermsDone() {
-    localStorage.setItem(PERMS_KEY, "1");
+    localStorage.setItem("lanchat_perms_granted", "1");
     setShowPerms(false);
   }
 
@@ -72,17 +84,20 @@ export default function App() {
         showNotification(
           sender?.display_name || sender?.username || "Someone",
           msg.content, msg.room_id,
-          () => { const r = state.rooms.find(x => x.id === msg.room_id); if (r) state.setActiveRoom(r); }
+          () => {
+            const r = state.rooms.find(x => x.id === msg.room_id);
+            if (r) state.setActiveRoom(r);
+          }
         );
       }
     });
 
-    socket.on("msg:edited",      (msg)              => updateMessage(msg.room_id, msg));
-    socket.on("msg:deleted",     ({ roomId, msgId }) => removeMessage(roomId, msgId));
-    socket.on("msg:receipt",     ({ roomId, msg })   => { if (msg) updateMessage(roomId, msg); });
-    socket.on("typing:update",   ({ roomId, typing }) => setTyping(roomId, typing || []));
-    socket.on("disconnect",      () => showToast("Disconnected…", "error"));
-    socket.on("reconnect",       () => showToast("Back online ✓", "success"));
+    socket.on("msg:edited",    (msg)              => updateMessage(msg.room_id, msg));
+    socket.on("msg:deleted",   ({ roomId, msgId }) => removeMessage(roomId, msgId));
+    socket.on("msg:receipt",   ({ roomId, msg })   => { if (msg) updateMessage(roomId, msg); });
+    socket.on("typing:update", ({ roomId, typing }) => setTyping(roomId, typing || []));
+    socket.on("disconnect",    ()                  => showToast("Disconnected…", "error"));
+    socket.on("reconnect",     ()                  => showToast("Back online ✓", "success"));
 
     return () => {
       ["presence:list","presence:update","msg:new","msg:edited",
@@ -91,9 +106,14 @@ export default function App() {
     };
   }, [user?.id]);
 
+  // Show permissions first if needed
   if (showPerms) return <Permissions onDone={onPermsDone} />;
-  if (booting)   return <Loader />;
-  if (!user)     return <AuthPage />;
+
+  // Show loader while restoring session
+  if (booting) return <Loader />;
+
+  // Show login if not authenticated
+  if (!user) return <AuthPage />;
 
   return (
     <>

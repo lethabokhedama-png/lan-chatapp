@@ -18,9 +18,9 @@ export function connect() {
     transports: ["websocket", "polling"],
   });
 
-  socket.on("connect", () => console.log("[Socket] Connected:", socket.id));
-  socket.on("disconnect", r => console.log("[Socket] Disconnected:", r));
-  socket.on("connect_error", e => console.error("[Socket] Error:", e.message));
+  socket.on("connect",       () => console.log("[Socket] Connected:", socket.id));
+  socket.on("disconnect",    r  => console.log("[Socket] Disconnected:", r));
+  socket.on("connect_error", e  => console.error("[Socket] Error:", e.message));
 
   return socket;
 }
@@ -28,15 +28,14 @@ export function connect() {
 export function disconnect() { socket?.disconnect(); socket = null; }
 
 export const emit = {
-  joinRoom:    (roomId)                  => socket?.emit("room:join",     { roomId }),
-  leaveRoom:   (roomId)                  => socket?.emit("room:leave",    { roomId }),
-  sendMsg:     (d)                       => socket?.emit("msg:send",      d),
-  editMsg:     (roomId, msgId, content)  => socket?.emit("msg:edit",      { roomId, msgId, content }),
-  deleteMsg:   (roomId, msgId)           => socket?.emit("msg:delete",    { roomId, msgId }),
-  delivered:   (roomId, msgId)           => socket?.emit("msg:delivered", { roomId, msgId }),
-  seen:        (roomId, msgId)           => socket?.emit("msg:seen",      { roomId, msgId }),
-  typingStart: (roomId)                  => socket?.emit("typing:start",  { roomId }),
-  typingStop:  (roomId),
-  react:       (roomId, msgId, emoji) => socket?.emit("msg:react", { roomId, msgId, emoji })
-  react:       (roomId, msgId, emoji) => socket?.emit("msg:react", { roomId, msgId, emoji }),                  => socket?.emit("typing:stop",   { roomId }),
+  joinRoom:    (roomId)                 => socket?.emit("room:join",     { roomId }),
+  leaveRoom:   (roomId)                 => socket?.emit("room:leave",    { roomId }),
+  sendMsg:     (d)                      => socket?.emit("msg:send",      d),
+  editMsg:     (roomId, msgId, content) => socket?.emit("msg:edit",      { roomId, msgId, content }),
+  deleteMsg:   (roomId, msgId)          => socket?.emit("msg:delete",    { roomId, msgId }),
+  delivered:   (roomId, msgId)          => socket?.emit("msg:delivered", { roomId, msgId }),
+  seen:        (roomId, msgId)          => socket?.emit("msg:seen",      { roomId, msgId }),
+  typingStart: (roomId)                 => socket?.emit("typing:start",  { roomId }),
+  typingStop:  (roomId)                 => socket?.emit("typing:stop",   { roomId }),
+  react:       (roomId, msgId, emoji)   => socket?.emit("msg:react",     { roomId, msgId, emoji }),
 };
