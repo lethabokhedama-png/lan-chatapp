@@ -36,6 +36,7 @@ export const emit = {
   delivered:   (roomId, msgId)           => socket?.emit("msg:delivered", { roomId, msgId }),
   seen:        (roomId, msgId)           => socket?.emit("msg:seen",      { roomId, msgId }),
   typingStart: (roomId)                  => socket?.emit("typing:start",  { roomId }),
-  typingStop:  (roomId)
+  typingStop:  (roomId),
+  react:       (roomId, msgId, emoji) => socket?.emit("msg:react", { roomId, msgId, emoji })
   react:       (roomId, msgId, emoji) => socket?.emit("msg:react", { roomId, msgId, emoji }),                  => socket?.emit("typing:stop",   { roomId }),
 };

@@ -8,6 +8,7 @@ import useStore from "../lib/store";
 import { rooms as roomsApi, auth, clearToken, users as usersApi } from "../lib/api";
 import { emit } from "../lib/socket";
 import Avatar from "./Avatar";
+import DevPanel from "../features/dev/DevPanel";
 import Modal  from "./Modal";
 
 const VERSION = "v0.4.0";
@@ -244,7 +245,7 @@ export default function Sidebar() {
                 ...(user?.username === "lethabok" ? [{ icon: <Settings size={14} />, label: "Dev Panel", page: "dev" }] : []),
               ].map(item => (
                 <PopItem key={item.label} icon={item.icon} label={item.label}
-                  onClick={() => { openSettings(item.page); setPopover(false); }} />
+                  onClick={() => item.page === "dev" ? () => { setShowDev(true); setPopover(false); } : () => { openSettings(item.page); setPopover(false); }} />
               ))}
               <div style={{ borderTop: "1px solid var(--border)" }}>
                 <PopItem icon={<LogOut size={14} />} label="Sign out"
@@ -294,6 +295,8 @@ export default function Sidebar() {
           <button className="btn btn-primary" onClick={createGroup}>Create</button>
         </div>
       </Modal>
+
+      {showDev && <DevPanel onClose={() => setShowDev(false)} />}
 
       {/* New DM modal */}
       <Modal open={showDm} onClose={() => setShowDm(false)} title="New Direct Message">

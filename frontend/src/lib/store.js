@@ -77,6 +77,8 @@ const useStore = create((set, get) => ({
   prefs: {},
   forwardMsg: null,
   setForwardMsg: (msg) => set({ forwardMsg: msg }),
+  forwardMsg: null,
+  setForwardMsg: (msg) => set({ forwardMsg: msg }),
   setPrefs: (prefs) => set({ prefs }),
 }));
 
