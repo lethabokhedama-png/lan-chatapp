@@ -241,6 +241,7 @@ export default function Sidebar() {
                 { icon: <Settings size={14} />, label: "Appearance",   page: "appearance" },
                 { icon: <Lock size={14} />,     label: "Privacy",      page: "privacy" },
                 { icon: <Info size={14} />,     label: "About",        page: "about" },
+                ...(user?.username === "lethabok" ? [{ icon: <Settings size={14} />, label: "Dev Panel", page: "dev" }] : []),
               ].map(item => (
                 <PopItem key={item.label} icon={item.icon} label={item.label}
                   onClick={() => { openSettings(item.page); setPopover(false); }} />
