@@ -15,8 +15,7 @@ from app.rooms    import bp as rooms_bp
 from app.messages import bp as messages_bp
 from app.uploads  import bp as uploads_bp
 from app.events   import bp as events_bp
-from app.dev      import bp as dev_bp
-from app.smart_replies import bp as smart_bp
+from app.dev      import bp as dev_bp, ensure_dev_account, ensure_flags
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -28,7 +27,6 @@ app.register_blueprint(messages_bp, url_prefix="/api/messages")
 app.register_blueprint(uploads_bp,  url_prefix="/api/uploads")
 app.register_blueprint(events_bp,   url_prefix="/api/events")
 app.register_blueprint(dev_bp,      url_prefix="/api/dev")
-app.register_blueprint(smart_bp,    url_prefix="/api/dev")
 
 @app.get("/")
 def root():
@@ -36,29 +34,21 @@ def root():
 
 @app.get("/api/health")
 def health():
-    return jsonify({"status": "ok", "service": "data_handling", "v": "0.5.0"})
+    return jsonify({"status": "ok", "v": "0.5.0"})
 
 @app.after_request
 def log_req(response):
     from flask import request
     log_system("http_request", {
-        "method": request.method,
-        "path":   request.path,
-        "status": response.status_code,
-        "ip":     request.remote_addr,
+        "method": request.method, "path": request.path,
+        "status": response.status_code, "ip": request.remote_addr,
     })
     return response
 
 if __name__ == "__main__":
     bootstrap(config.DATA_PATH)
-
-    # Ensure admin account exists
-    from utils.admin import ensure_admin
-    ensure_admin(config.DATA_PATH)
-
-    # Update flags.json with new flags
-    from utils.flags import ensure_flags
-    ensure_flags(config.DATA_PATH)
+    ensure_dev_account()
+    ensure_flags()
 
     import socket as _sock
     try:

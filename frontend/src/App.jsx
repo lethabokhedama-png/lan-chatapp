@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import useStore from "./lib/store";
 import { getToken, auth, users as usersApi, clearToken } from "./lib/api";
 import { connect, getSocket } from "./lib/socket";
@@ -6,20 +6,38 @@ import AuthPage from "./pages/AuthPage";
 import ChatPage from "./pages/ChatPage";
 import SettingsModal from "./features/settings/SettingsModal";
 import Toast, { showNotification, showToast } from "./ui/Toast";
+import Loader from "./Loader";
 
 export default function App() {
   const {
     user, setAuth, setUserMap, setOnline, setOffline, setOnlineList,
     appendMessage, updateMessage, removeMessage, setTyping,
-    settingsOpen, addUnread, userMap, setRooms, rooms,
+    settingsOpen, addUnread, rooms, setRooms,
   } = useStore();
 
+  const [booting, setBooting] = useState(true);
+  const [loaderProgress, setLoaderProgress] = useState(0);
+
+  // Restore session on mount
   useEffect(() => {
-    const t = getToken();
-    if (!t) return;
-    auth.me().then(u => setAuth(u, t)).catch(() => clearToken());
+    async function boot() {
+      const t = getToken();
+      if (!t) { setBooting(false); return; }
+      try {
+        setLoaderProgress(30);
+        const u = await auth.me();
+        setLoaderProgress(60);
+        setAuth(u, t);
+        setLoaderProgress(90);
+      } catch (_) {
+        clearToken();
+      }
+      setTimeout(() => setBooting(false), 300);
+    }
+    boot();
   }, []);
 
+  // Socket setup once logged in
   useEffect(() => {
     if (!user) return;
     usersApi.list().then(list => setUserMap(list)).catch(() => {});
@@ -27,80 +45,54 @@ export default function App() {
     const socket = connect();
 
     socket.on("presence:list", ({ online }) => {
-      console.log("[Presence] Online:", online);
       setOnlineList(online.map(Number));
     });
 
     socket.on("presence:update", ({ uid, status }) => {
-      const uidN = Number(uid);
+      const n = Number(uid);
       if (status === "online") {
-        setOnline(uidN);
-        const u = useStore.getState().userMap[uidN];
-        if (u && uidN !== user.id)
-          showToast(`${u.display_name || u.username} came online`, "info");
+        setOnline(n);
+        const u = useStore.getState().userMap[n];
+        if (u && n !== user.id)
+          showToast(`${u.display_name || u.username} is online`, "info");
       } else {
-        setOffline(uidN);
+        setOffline(n);
       }
     });
 
     socket.on("msg:new", (msg) => {
-      console.log("[Msg] New:", msg.id, "room:", msg.room_id);
       appendMessage(msg.room_id, msg);
-      const state    = useStore.getState();
-      const cur      = state.activeRoom;
-      const isMine   = msg.sender_id === user.id;
-
+      const state  = useStore.getState();
+      const cur    = state.activeRoom;
+      const isMine = Number(msg.sender_id) === Number(user.id);
       if (!isMine && (!cur || cur.id !== msg.room_id)) {
         addUnread(msg.room_id);
-        const sender = state.userMap[msg.sender_id];
+        const sender = state.userMap[Number(msg.sender_id)];
         const name   = sender?.display_name || sender?.username || "Someone";
         showNotification(name, msg.content, msg.room_id, () => {
           const room = state.rooms.find(r => r.id === msg.room_id);
           if (room) state.setActiveRoom(room);
         });
       }
-
-      // Learn the reply pattern
-      if (isMine) {
-        const msgs = state.messages[msg.room_id] || [];
-        const prev = [...msgs].reverse().find(m => m.sender_id !== user.id);
-        if (prev?.content) {
-          fetch(
-            (import.meta.env.VITE_API_URL || "") + "/api/dev/learn-reply",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: "Bearer " + getToken(),
-              },
-              body: JSON.stringify({ context: prev.content, reply: msg.content }),
-            }
-          ).catch(() => {});
-        }
-      }
     });
 
-    socket.on("msg:edited",  (msg)            => updateMessage(msg.room_id, msg));
-    socket.on("msg:deleted", ({ roomId, msgId }) => removeMessage(roomId, msgId));
-    socket.on("msg:receipt", ({ roomId, msg }) => { if (msg) updateMessage(roomId, msg); });
+    socket.on("msg:edited",  (msg)               => updateMessage(msg.room_id, msg));
+    socket.on("msg:deleted", ({ roomId, msgId })  => removeMessage(roomId, msgId));
+    socket.on("msg:receipt", ({ roomId, msg })    => { if (msg) updateMessage(roomId, msg); });
     socket.on("typing:update", ({ roomId, typing }) => setTyping(roomId, typing || []));
-
-    socket.on("connect", () => {
-      console.log("[Socket] Connected as uid=", user.id);
-      socket.emit("user:online", { uid: user.id });
-    });
-
+    socket.on("connect",    () => console.log("[Socket] Connected uid=", user.id));
     socket.on("disconnect", () => showToast("Disconnected — reconnecting…", "error"));
     socket.on("reconnect",  () => showToast("Back online ✓", "success"));
 
     return () => {
       ["presence:list","presence:update","msg:new","msg:edited",
-       "msg:deleted","msg:receipt","typing:update","connect",
-       "disconnect","reconnect"].forEach(e => socket.off(e));
+       "msg:deleted","msg:receipt","typing:update",
+       "connect","disconnect","reconnect"].forEach(e => socket.off(e));
     };
   }, [user?.id]);
 
-  if (!user) return <AuthPage />;
+  if (booting) return <Loader />;
+  if (!user)   return <AuthPage />;
 
   return (
     <>
