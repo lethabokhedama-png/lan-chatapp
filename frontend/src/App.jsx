@@ -18,25 +18,23 @@ export default function App() {
 
   const [booting,   setBooting]   = useState(true);
   const [showPerms, setShowPerms] = useState(false);
+  const [permsChecked, setPermsChecked] = useState(false);
 
+  // Step 1 — check permissions
   useEffect(() => {
-    async function boot() {
-      // Check if this device needs to show permissions
-      const permsGranted = localStorage.getItem("lanchat_perms_granted");
-      if (!permsGranted) {
-        setShowPerms(true);
-      } else {
-        // Re-check actual browser state — prompt again if revoked
-        try {
-          const mic   = await navigator.permissions?.query({ name: "microphone" });
-          const notif = typeof Notification !== "undefined" ? Notification.permission : "granted";
-          if (mic?.state === "denied" || notif === "default") {
-            setShowPerms(true);
-          }
-        } catch (_) {}
-      }
+    const granted = localStorage.getItem("lanchat_perms_granted");
+    if (!granted) {
+      setShowPerms(true);
+    }
+    setPermsChecked(true);
+  }, []);
 
-      // Restore session
+  // Step 2 — restore session (runs after perms checked)
+  useEffect(() => {
+    if (!permsChecked) return;
+    if (showPerms) return; // wait until perms done
+
+    async function boot() {
       const t = getToken();
       if (t) {
         try {
@@ -49,11 +47,25 @@ export default function App() {
       setBooting(false);
     }
     boot();
-  }, []);
+  }, [permsChecked, showPerms]);
 
   function onPermsDone() {
     localStorage.setItem("lanchat_perms_granted", "1");
     setShowPerms(false);
+    // Now boot
+    async function boot() {
+      const t = getToken();
+      if (t) {
+        try {
+          const u = await auth.me();
+          setAuth(u, t);
+        } catch (_) {
+          clearToken();
+        }
+      }
+      setBooting(false);
+    }
+    boot();
   }
 
   useEffect(() => {
@@ -106,14 +118,10 @@ export default function App() {
     };
   }, [user?.id]);
 
-  // Show permissions first if needed
-  if (showPerms) return <Permissions onDone={onPermsDone} />;
-
-  // Show loader while restoring session
-  if (booting) return <Loader />;
-
-  // Show login if not authenticated
-  if (!user) return <AuthPage />;
+  // Render order — permissions first, then loader, then app
+  if (showPerms)                return <Permissions onDone={onPermsDone} />;
+  if (!permsChecked || booting) return <Loader />;
+  if (!user)                    return <AuthPage />;
 
   return (
     <>
