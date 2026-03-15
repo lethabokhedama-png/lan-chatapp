@@ -411,7 +411,7 @@ export default function SettingsPage({ onBack, devUnlocked, onOpenDev }) {
                 style={{ color: "var(--text-3)", fontSize: 12, marginBottom: 4,
                   cursor: "pointer", userSelect: "none" }}
               >
-                v1.6.0 — Local Network Messenger
+                v1.7.14 — Local Network Messenger
                 {devTaps > 0 && devTaps < 5 && (
                   <span style={{ color: "var(--accent)", marginLeft: 6 }}>
                     ({5 - devTaps} more taps)
@@ -433,7 +433,7 @@ export default function SettingsPage({ onBack, devUnlocked, onOpenDev }) {
                 display: "flex", flexDirection: "column", gap: 10,
               }}>
                 {[
-                  ["Version",    "v1.6.0"],
+                  ["Version",    "v1.7.14"],
                   ["Frontend",   "React + Vite"],
                   ["Realtime",   "Node.js + Socket.IO"],
                   ["API",        "Python Flask"],
