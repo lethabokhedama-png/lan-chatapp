@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
   CornerUpLeft, Edit2, Copy, Trash2,
-  Share2, Pin, X
+  Share2, MapPin, X
 } from "react-feather";
 import { emit } from "../../lib/socket";
 import useStore from "../../lib/store";
@@ -64,7 +64,7 @@ export default function MessageMenu({ msg, mine, room, onClose, onReply, onEdit 
     ...(mine ? [{ icon: <Edit2 size={15} />, label: "Edit", action: () => { onEdit(); onClose(); } }] : []),
     { icon: <Copy size={15} />,         label: "Copy",    action: copyMsg },
     { icon: <Share2 size={15} />,       label: "Forward", action: forwardMsg },
-    { icon: <Pin size={15} />,          label: "Pin",     action: pinMsg },
+    { icon: <MapPin size={15} />,          label: "Pin",     action: pinMsg },
     ...(mine ? [{ icon: <Trash2 size={15} />, label: "Delete", action: deleteMsg, danger: true }] : []),
   ];
 

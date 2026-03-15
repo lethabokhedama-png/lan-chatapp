@@ -5,7 +5,7 @@ import config
 from utils.secret import load_or_create
 config.SECRET = load_or_create(config.DATA_PATH)
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from utils.store  import bootstrap
 from utils.audit  import log_system
@@ -30,19 +30,37 @@ app.register_blueprint(dev_bp,      url_prefix="/api/dev")
 
 @app.get("/")
 def root():
-    return jsonify({"service": "LAN Chat API", "status": "running", "v": "0.5.0"})
+    return jsonify({"service": "LAN Chat API", "status": "ok", "v": "1.7.15"})
 
 @app.get("/api/health")
 def health():
-    return jsonify({"status": "ok", "v": "0.5.0"})
+    return jsonify({"status": "ok", "v": "1.7.15"})
+
+import time as _time
+_req_start = {}
+
+@app.before_request
+def before():
+    _req_start[request.environ.get("REQUEST_ID",id(request))] = _time.time()
+
+import time as _time
+_req_start = {}
+
+@app.before_request
+def before():
+    _req_start[request.environ.get("REQUEST_ID",id(request))] = _time.time()
 
 @app.after_request
-def log_req(response):
-    from flask import request
-    log_system("http_request", {
-        "method": request.method, "path": request.path,
-        "status": response.status_code, "ip": request.remote_addr,
-    })
+def after(response):
+    rid = request.environ.get("REQUEST_ID", id(request))
+    ms  = round((_time.time() - _req_start.pop(rid, _time.time())) * 1000)
+    print(f"  [{request.method}] {request.path} {response.status_code} {ms}ms")
+    rid = request.environ.get("REQUEST_ID", id(request))
+    ms  = round((_time.time() - _req_start.pop(rid, _time.time())) * 1000)
+    print(f"  [{request.method}] {request.path} {response.status_code} {ms}ms")
+    response.headers["Access-Control-Allow-Origin"]  = "*"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "*"
     return response
 
 if __name__ == "__main__":
@@ -55,15 +73,20 @@ if __name__ == "__main__":
         s = _sock.socket(); s.connect(("8.8.8.8", 80))
         host_ip = s.getsockname()[0]; s.close()
     except Exception:
-        host_ip = "127.0.0.1"
+        host_ip = "0.0.0.0"
 
     from utils.ip_ledger import record_host
     record_host(host_ip)
     log_system("server_start", {"ip": host_ip, "port": config.PORT})
 
-    print(f"\n  [DataHandling] http://{host_ip}:{config.PORT}")
-    print(f"  [DataHandling] DATA → {config.DATA_PATH}")
-    print(f"  [DataHandling] Secret → DATA/secret.key\n")
+    print(f"\n  [API] http://{host_ip}:{config.PORT}")
+    print(f"  [API] DATA → {config.DATA_PATH}\n")
 
-    app.run(host=config.HOST, port=config.PORT, debug=True,
-            use_reloader=False, threaded=True)
+    try:
+        from waitress import serve
+        print("  [API] Using waitress (production)\n")
+        serve(app, host=config.HOST, port=config.PORT, threads=8)
+    except ImportError:
+        print("  [API] Using Flask dev server (install waitress for faster startup)\n")
+        app.run(host=config.HOST, port=config.PORT, debug=True,
+                use_reloader=False, threaded=True)
