@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from "react";
-import { X, User, Bell, Sliders, Lock, Info, ChevronLeft, ChevronRight, ToggleLeft, ToggleRight } from "react-feather";
-import useStore from "../../lib/store";
-import { users as usersApi, auth } from "../../lib/api";
+import React, { useState, useRef, useEffect } from "react";
+import { ArrowLeft, ChevronRight, User, Bell, Sliders, Lock, Info } from "react-feather";
+import useStore from "../lib/store";
+import { users as usersApi, auth, clearToken } from "../lib/api";
 
 const THEMES = [
   { id: "dark",        label: "Dark",        bg: "#0d0f14", accent: "#4f8ef7", accent2: "#7c6af7" },
@@ -25,12 +25,12 @@ const AVATAR_COLORS = [
   ["#ffa030","#e07010"],["#00d4a0","#0090c0"],["#f5a623","#d4850a"],
 ];
 
-const TABS = [
-  { id: "account",       label: "Account",       icon: <User size={14} /> },
-  { id: "appearance",    label: "Appearance",     icon: <Sliders size={14} /> },
-  { id: "notifications", label: "Notifications",  icon: <Bell size={14} /> },
-  { id: "privacy",       label: "Privacy",        icon: <Lock size={14} /> },
-  { id: "about",         label: "About",          icon: <Info size={14} /> },
+const SECTIONS = [
+  { id: "account",       label: "Account",       icon: <User size={16} />,    sub: "Profile, password, avatar" },
+  { id: "appearance",    label: "Appearance",     icon: <Sliders size={16} />, sub: "Themes and colors" },
+  { id: "notifications", label: "Notifications",  icon: <Bell size={16} />,    sub: "Alerts and sounds" },
+  { id: "privacy",       label: "Privacy",        icon: <Lock size={16} />,    sub: "Online status, receipts" },
+  { id: "about",         label: "About",          icon: <Info size={16} />,    sub: "Version and credits" },
 ];
 
 function applyTheme(t) {
@@ -51,72 +51,66 @@ function applyTheme(t) {
   };
   const v = vars[t.id] || vars.dark;
   const r = document.documentElement;
-  r.style.setProperty("--bg-base",            v.base);
-  r.style.setProperty("--bg-surface",         v.surface);
-  r.style.setProperty("--bg-sidebar",         v.sidebar);
-  r.style.setProperty("--bg-raised",          v.raised);
-  r.style.setProperty("--bg-hover",           v.hover);
-  r.style.setProperty("--bg-active",          v.active);
-  r.style.setProperty("--border",             v.border);
-  r.style.setProperty("--text-1",             v.t1);
-  r.style.setProperty("--text-2",             v.t2);
-  r.style.setProperty("--text-3",             v.t3);
-  r.style.setProperty("--accent",             v.accent);
-  r.style.setProperty("--accent2",            v.accent2);
-  r.style.setProperty("--accent-dim",         v.accent + "44");
-  r.style.setProperty("--accent-glow",        v.accent + "22");
-  r.style.setProperty("--green",              v.green);
+  r.style.setProperty("--bg-base",           v.base);
+  r.style.setProperty("--bg-surface",        v.surface);
+  r.style.setProperty("--bg-sidebar",        v.sidebar);
+  r.style.setProperty("--bg-raised",         v.raised);
+  r.style.setProperty("--bg-hover",          v.hover);
+  r.style.setProperty("--bg-active",         v.active);
+  r.style.setProperty("--border",            v.border);
+  r.style.setProperty("--text-1",            v.t1);
+  r.style.setProperty("--text-2",            v.t2);
+  r.style.setProperty("--text-3",            v.t3);
+  r.style.setProperty("--accent",            v.accent);
+  r.style.setProperty("--accent2",           v.accent2);
+  r.style.setProperty("--accent-dim",        v.accent + "44");
+  r.style.setProperty("--accent-glow",       v.accent + "22");
+  r.style.setProperty("--green",             v.green);
   r.style.setProperty("--red",               v.red);
-  r.style.setProperty("--receipt-sent",       v.t3);
-  r.style.setProperty("--receipt-delivered",  "#f5a623");
-  r.style.setProperty("--receipt-seen",       v.accent);
+  r.style.setProperty("--receipt-sent",      v.t3);
+  r.style.setProperty("--receipt-delivered", "#f5a623");
+  r.style.setProperty("--receipt-seen",      v.accent);
 }
 
-export default function SettingsModal() {
-  const { closeSettings, settingsPage, user, setAuth, token, clearAuth } = useStore();
-  const [tab, setTab]           = useState(settingsPage || "account");
+export default function SettingsPage({ onBack }) {
+  const { user, setAuth, token, clearAuth } = useStore();
+  const [section, setSection]     = useState(null);
   const [displayName, setDisplayName] = useState(user?.display_name || "");
-  const [bio, setBio]           = useState(user?.bio || "");
-  const [phone, setPhone]       = useState(user?.phone || "");
-  const [oldPw, setOldPw]       = useState("");
-  const [newPw, setNewPw]       = useState("");
+  const [bio, setBio]             = useState(user?.bio || "");
+  const [phone, setPhone]         = useState(user?.phone || "");
+  const [oldPw, setOldPw]         = useState("");
+  const [newPw, setNewPw]         = useState("");
   const [confirmPw, setConfirmPw] = useState("");
   const [avatarColor, setAvatarColor] = useState(0);
-  const [pfp, setPfp]           = useState(user?.avatar_url || null);
-  const [saved, setSaved]       = useState("");
-  const [devTaps, setDevTaps]   = useState(0);
+  const [pfp, setPfp]             = useState(user?.avatar_url || null);
+  const [saved, setSaved]         = useState("");
+  const [devTaps, setDevTaps]     = useState(0);
   const [devUnlocked, setDevUnlocked] = useState(
     () => user?.username === "lethabok" || localStorage.getItem("lanchat_dev_unlocked") === "1"
   );
-  const [theme, setTheme]       = useState(() => localStorage.getItem("lanchat_theme") || "dark");
+  const [theme, setTheme] = useState(() => localStorage.getItem("lanchat_theme") || "dark");
   const pfpRef = useRef(null);
 
-  useEffect(() => { setTab(settingsPage || "account"); }, [settingsPage]);
-
   useEffect(() => {
-    const saved = localStorage.getItem("lanchat_theme") || "dark";
-    const t = THEMES.find(x => x.id === saved);
-    if (t) { setTheme(t.id); applyTheme(t); }
+    const t = THEMES.find(x => x.id === theme);
+    if (t) applyTheme(t);
   }, []);
-
-  function handleApplyTheme(t) {
-    setTheme(t.id);
-    applyTheme(t);
-  }
 
   async function saveAccount() {
     try {
       const updated = await usersApi.updateMe({ display_name: displayName, bio, phone });
       setAuth(updated, token);
-      setSaved("account"); setTimeout(() => setSaved(""), 2500);
+      setSaved("account");
+      setTimeout(() => setSaved(""), 2500);
     } catch (_) {}
   }
 
   async function uploadPfp(e) {
-    const file = e.target.files[0]; if (!file) return;
-    const BASE  = import.meta.env.VITE_API_URL || "";
-    const tk    = localStorage.getItem("lanchat_token");
-    const form  = new FormData();
+    const file = e.target.files[0];
+    if (!file) return;
+    const BASE = import.meta.env.VITE_API_URL || "";
+    const tk   = localStorage.getItem("lanchat_token");
+    const form = new FormData();
     form.append("file", file);
     try {
       const res  = await fetch(BASE + "/api/uploads/file", {
@@ -130,19 +124,26 @@ export default function SettingsModal() {
   }
 
   async function changePassword() {
-    if (newPw !== confirmPw) { setSaved("pw_mismatch"); setTimeout(() => setSaved(""), 3000); return; }
+    if (newPw !== confirmPw) {
+      setSaved("pw_mismatch");
+      setTimeout(() => setSaved(""), 3000);
+      return;
+    }
     try {
       await auth.changePassword({ old_password: oldPw, new_password: newPw });
-      setSaved("pw"); setTimeout(() => setSaved(""), 2500);
+      setSaved("pw");
+      setTimeout(() => setSaved(""), 2500);
       setOldPw(""); setNewPw(""); setConfirmPw("");
-    } catch (_) { setSaved("pw_err"); setTimeout(() => setSaved(""), 3000); }
+    } catch (_) {
+      setSaved("pw_err");
+      setTimeout(() => setSaved(""), 3000);
+    }
   }
 
   function logout() {
     auth.logout().catch(() => {});
-    import("../../lib/api").then(m => m.clearToken());
+    clearToken();
     clearAuth();
-    closeSettings();
   }
 
   function handleDevTap() {
@@ -158,100 +159,66 @@ export default function SettingsModal() {
   const initials = (user?.display_name || user?.username || "?")[0].toUpperCase();
   const acColors = AVATAR_COLORS[avatarColor];
 
-  return (
-    <div style={{
-      position: "fixed", inset: 0,
-      background: "rgba(0,0,0,.75)",
-      backdropFilter: "blur(6px)",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      zIndex: 200, padding: 12,
-    }} onClick={closeSettings}>
+  function PageHeader({ title, goBack }) {
+    return (
       <div style={{
+        display: "flex", alignItems: "center", gap: 12,
+        padding: "14px 16px", borderBottom: "1px solid var(--border)",
         background: "var(--bg-surface)",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius-xl)",
-        width: "100%", maxWidth: 520,
-        maxHeight: "92dvh",
-        display: "flex", flexDirection: "column",
-        boxShadow: "0 24px 80px rgba(0,0,0,.7)",
-        overflow: "hidden",
-      }} onClick={e => e.stopPropagation()}>
-
-        {/* Header */}
-        <div style={{
-          display: "flex", alignItems: "center",
-          justifyContent: "space-between",
-          padding: "16px 20px 0", flexShrink: 0,
-        }}>
-          <div style={{ fontFamily: "var(--font-display)", fontSize: 17,
-            fontWeight: 700, color: "var(--text-1)" }}>Settings</div>
-          <button className="icon-btn" onClick={closeSettings}><X size={16} /></button>
+        position: "sticky", top: 0, zIndex: 10, flexShrink: 0,
+      }}>
+        <button className="icon-btn" onClick={goBack}>
+          <ArrowLeft size={18} />
+        </button>
+        <div style={{ fontFamily: "var(--font-display)", fontSize: 16,
+          fontWeight: 700, color: "var(--text-1)" }}>
+          {title}
         </div>
+      </div>
+    );
+  }
 
-        {/* Horizontal tabs */}
-        <div style={{
-          display: "flex", padding: "10px 16px 0",
-          borderBottom: "1px solid var(--border)",
-          flexShrink: 0, overflowX: "auto", scrollbarWidth: "none",
-        }}>
-          {TABS.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)} style={{
-              display: "flex", alignItems: "center", gap: 5,
-              padding: "8px 11px", background: "transparent", border: "none",
-              cursor: "pointer", fontSize: 12, fontFamily: "var(--font-body)",
-              color: tab === t.id ? "var(--accent)" : "var(--text-3)",
-              borderBottom: `2px solid ${tab === t.id ? "var(--accent)" : "transparent"}`,
-              marginBottom: -1, whiteSpace: "nowrap", transition: "var(--trans)",
-              fontWeight: tab === t.id ? 600 : 400,
-            }}>
-              {t.icon} {t.label}
-            </button>
-          ))}
-          {devUnlocked && (
-            <button onClick={() => {
-              closeSettings();
-              setTimeout(() => useStore.getState().setShowDevPanel?.(true), 100);
-            }} style={{
-              display: "flex", alignItems: "center", gap: 5,
-              padding: "8px 11px", background: "transparent", border: "none",
-              cursor: "pointer", fontSize: 12, fontFamily: "var(--font-body)",
-              color: "var(--accent)", borderBottom: "2px solid transparent",
-              marginBottom: -1, whiteSpace: "nowrap",
-            }}>
-              Dev Panel
-            </button>
-          )}
-        </div>
-
-        {/* Content */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "18px 20px" }}>
+  // ── Section detail view ──────────────────────────────────────────────────────
+  if (section) {
+    return (
+      <div style={{ height: "100%", display: "flex", flexDirection: "column",
+        background: "var(--bg-base)", overflowY: "auto" }}>
+        <PageHeader
+          title={SECTIONS.find(s => s.id === section)?.label}
+          goBack={() => setSection(null)}
+        />
+        <div style={{ padding: 16, flex: 1 }}>
 
           {/* ── Account ── */}
-          {tab === "account" && (
+          {section === "account" && (
             <div>
               <div style={{ textAlign: "center", marginBottom: 20 }}>
-                {/* Profile picture */}
                 <div style={{ position: "relative", display: "inline-block", marginBottom: 10 }}>
-                  <div onClick={() => pfpRef.current?.click()} style={{
-                    width: 80, height: 80, borderRadius: "50%",
-                    background: pfp ? "transparent" : `linear-gradient(135deg, ${acColors[0]}, ${acColors[1]})`,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 28, fontWeight: 700, color: "#fff",
-                    boxShadow: `0 0 24px ${acColors[0]}44`,
-                    cursor: "pointer", overflow: "hidden",
-                  }}>
+                  <div
+                    onClick={() => pfpRef.current?.click()}
+                    style={{
+                      width: 80, height: 80, borderRadius: "50%",
+                      background: `linear-gradient(135deg, ${acColors[0]}, ${acColors[1]})`,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 28, fontWeight: 700, color: "#fff",
+                      boxShadow: `0 0 24px ${acColors[0]}44`,
+                      cursor: "pointer", overflow: "hidden",
+                    }}
+                  >
                     {pfp
-                      ? <img src={pfp} alt="pfp" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
-                      : initials
-                    }
+                      ? <img src={pfp} alt="pfp" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      : initials}
                   </div>
-                  <div onClick={() => pfpRef.current?.click()} style={{
-                    position: "absolute", bottom: 0, right: 0,
-                    width: 26, height: 26, borderRadius: "50%",
-                    background: "var(--accent)", border: "2px solid var(--bg-surface)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    cursor: "pointer",
-                  }}>
+                  <div
+                    onClick={() => pfpRef.current?.click()}
+                    style={{
+                      position: "absolute", bottom: 0, right: 0,
+                      width: 26, height: 26, borderRadius: "50%",
+                      background: "var(--accent)", border: "2px solid var(--bg-base)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      cursor: "pointer",
+                    }}
+                  >
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
                       stroke="white" strokeWidth="2.5" strokeLinecap="round">
                       <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
@@ -259,7 +226,7 @@ export default function SettingsModal() {
                     </svg>
                   </div>
                   <input ref={pfpRef} type="file" accept="image/*"
-                    style={{ display:"none" }} onChange={uploadPfp} />
+                    style={{ display: "none" }} onChange={uploadPfp} />
                 </div>
                 <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)" }}>
                   {user?.display_name || user?.username}
@@ -267,19 +234,21 @@ export default function SettingsModal() {
                 <div style={{ fontSize: 11, color: "var(--text-3)" }}>@{user?.username}</div>
               </div>
 
-              {/* Avatar color */}
               <div style={{ marginBottom: 16 }}>
                 <div className="label">Avatar Color</div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
                   {AVATAR_COLORS.map(([a, b], i) => (
-                    <div key={i} onClick={() => setAvatarColor(i)} style={{
-                      width: 28, height: 28, borderRadius: "50%",
-                      background: `linear-gradient(135deg, ${a}, ${b})`,
-                      cursor: "pointer",
-                      border: avatarColor === i ? "2px solid var(--text-1)" : "2px solid transparent",
-                      boxShadow: avatarColor === i ? `0 0 10px ${a}88` : "none",
-                      transition: "var(--trans)",
-                    }} />
+                    <div
+                      key={i}
+                      onClick={() => setAvatarColor(i)}
+                      style={{
+                        width: 30, height: 30, borderRadius: "50%",
+                        background: `linear-gradient(135deg, ${a}, ${b})`,
+                        cursor: "pointer",
+                        border: avatarColor === i ? "2px solid var(--text-1)" : "2px solid transparent",
+                        transition: "var(--trans)",
+                      }}
+                    />
                   ))}
                 </div>
               </div>
@@ -287,19 +256,19 @@ export default function SettingsModal() {
               <div className="form-group">
                 <label className="label">Display Name</label>
                 <input className="input" value={displayName}
-                  onChange={e => setDisplayName(e.target.value)} placeholder="Your display name" />
+                  onChange={e => setDisplayName(e.target.value)} placeholder="Your name" />
               </div>
               <div className="form-group">
                 <label className="label">Username</label>
                 <input className="input" value={user?.username} disabled />
               </div>
               <div className="form-group">
-                <label className="label">Bio / Status</label>
+                <label className="label">Bio</label>
                 <input className="input" value={bio}
-                  onChange={e => setBio(e.target.value)} placeholder="What's on your mind?" />
+                  onChange={e => setBio(e.target.value)} placeholder="What is on your mind?" />
               </div>
               <div className="form-group">
-                <label className="label">Phone Number</label>
+                <label className="label">Phone</label>
                 <input className="input" value={phone}
                   onChange={e => setPhone(e.target.value)}
                   placeholder="+27 000 000 0000" type="tel" />
@@ -309,9 +278,8 @@ export default function SettingsModal() {
                 {saved === "account" ? "Saved!" : "Save Changes"}
               </button>
 
-              {/* Change password */}
               <div style={{ marginTop: 22, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
-                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: "var(--text-1)" }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)", marginBottom: 14 }}>
                   Change Password
                 </div>
                 <div className="form-group">
@@ -325,32 +293,35 @@ export default function SettingsModal() {
                     onChange={e => setNewPw(e.target.value)} placeholder="••••••••" />
                 </div>
                 <div className="form-group">
-                  <label className="label">Confirm New Password</label>
+                  <label className="label">Confirm Password</label>
                   <input className="input" type="password" value={confirmPw}
                     onChange={e => setConfirmPw(e.target.value)} placeholder="••••••••" />
                 </div>
                 {saved === "pw_mismatch" && (
-                  <div style={{ color:"var(--red)", fontSize:12, marginBottom:8 }}>
+                  <div style={{ color: "var(--red)", fontSize: 12, marginBottom: 8 }}>
                     Passwords do not match
                   </div>
                 )}
                 {saved === "pw_err" && (
-                  <div style={{ color:"var(--red)", fontSize:12, marginBottom:8 }}>
-                    Incorrect current password
+                  <div style={{ color: "var(--red)", fontSize: 12, marginBottom: 8 }}>
+                    Wrong current password
                   </div>
                 )}
                 <button className="btn btn-ghost btn-full" onClick={changePassword}>
-                  {saved === "pw" ? "Password Changed!" : "Change Password"}
+                  {saved === "pw" ? "Changed!" : "Change Password"}
                 </button>
               </div>
 
-              {/* Sign out */}
               <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
-                <button className="btn btn-full" onClick={logout} style={{
-                  background: "rgba(224,92,92,.1)",
-                  border: "1px solid rgba(224,92,92,.3)",
-                  color: "var(--red)",
-                }}>
+                <button
+                  className="btn btn-full"
+                  onClick={logout}
+                  style={{
+                    background: "rgba(224,92,92,.1)",
+                    border: "1px solid rgba(224,92,92,.3)",
+                    color: "var(--red)",
+                  }}
+                >
                   Sign Out
                 </button>
               </div>
@@ -358,30 +329,34 @@ export default function SettingsModal() {
           )}
 
           {/* ── Appearance ── */}
-          {tab === "appearance" && (
+          {section === "appearance" && (
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 14, color: "var(--text-1)" }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)", marginBottom: 14 }}>
                 Theme
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
                 {THEMES.map(t => (
-                  <div key={t.id} onClick={() => handleApplyTheme(t)} style={{
-                    cursor: "pointer", borderRadius: "var(--radius-sm)", overflow: "hidden",
-                    border: `2px solid ${theme === t.id ? "var(--accent)" : "var(--border)"}`,
-                    transition: "var(--trans)",
-                    boxShadow: theme === t.id ? "0 0 0 3px var(--accent-glow)" : "none",
-                  }}>
+                  <div
+                    key={t.id}
+                    onClick={() => { setTheme(t.id); applyTheme(t); }}
+                    style={{
+                      cursor: "pointer", borderRadius: "var(--radius-sm)", overflow: "hidden",
+                      border: `2px solid ${theme === t.id ? "var(--accent)" : "var(--border)"}`,
+                      boxShadow: theme === t.id ? "0 0 0 3px var(--accent-glow)" : "none",
+                      transition: "var(--trans)",
+                    }}
+                  >
                     <div style={{
                       height: 52, background: t.bg,
                       display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
                     }}>
-                      <div style={{ width:18, height:18, borderRadius:"50%",
-                        background: t.accent, boxShadow:`0 0 8px ${t.accent}` }} />
-                      <div style={{ width:14, height:14, borderRadius:"50%",
-                        background: t.accent2, opacity:.7 }} />
+                      <div style={{ width: 18, height: 18, borderRadius: "50%",
+                        background: t.accent, boxShadow: `0 0 8px ${t.accent}` }} />
+                      <div style={{ width: 14, height: 14, borderRadius: "50%",
+                        background: t.accent2, opacity: .7 }} />
                     </div>
-                    <div style={{ padding:"4px 6px", background:"var(--bg-raised)",
-                      fontSize:10, textAlign:"center", color:"var(--text-2)" }}>
+                    <div style={{ padding: "4px 6px", background: "var(--bg-raised)",
+                      fontSize: 10, textAlign: "center", color: "var(--text-2)" }}>
                       {t.label}
                     </div>
                   </div>
@@ -391,51 +366,57 @@ export default function SettingsModal() {
           )}
 
           {/* ── Notifications ── */}
-          {tab === "notifications" && (
-            <div style={{ display: "flex", flexDirection: "column" }}>
+          {section === "notifications" && (
+            <div>
               {[
-                { label: "Message banners",    sub: "Show banner on new message",         defaultOn: true  },
-                { label: "Online alerts",      sub: "When someone comes online",          defaultOn: true  },
-                { label: "Notification sound", sub: "Play sound on new message",          defaultOn: true  },
-                { label: "Mention alerts",     sub: "When you are mentioned in a group",  defaultOn: true  },
-                { label: "Background alerts",  sub: "Browser notification when minimised",defaultOn: false },
+                { label: "Message banners",    sub: "Show banner on new message",          defaultOn: true  },
+                { label: "Online alerts",      sub: "When someone comes online",           defaultOn: true  },
+                { label: "Notification sound", sub: "Play sound on new message",           defaultOn: true  },
+                { label: "Mention alerts",     sub: "When you are mentioned in a group",   defaultOn: true  },
+                { label: "Background alerts",  sub: "Browser notification when minimised", defaultOn: false },
               ].map(item => <ToggleRow key={item.label} {...item} />)}
             </div>
           )}
 
           {/* ── Privacy ── */}
-          {tab === "privacy" && (
-            <div style={{ display: "flex", flexDirection: "column" }}>
+          {section === "privacy" && (
+            <div>
               {[
-                { label: "Show online status",  sub: "Others can see when you are online",  defaultOn: true  },
-                { label: "Read receipts",        sub: "Show when you have seen messages",    defaultOn: true  },
-                { label: "Typing indicator",     sub: "Show when you are typing",            defaultOn: true  },
-                { label: "Phone number visible", sub: "Allow others to see your number",     defaultOn: false },
+                { label: "Show online status",  sub: "Others see when you are online",  defaultOn: true  },
+                { label: "Read receipts",        sub: "Show when messages are seen",     defaultOn: true  },
+                { label: "Typing indicator",     sub: "Show when you are typing",        defaultOn: true  },
+                { label: "Phone number visible", sub: "Allow others to see your number", defaultOn: false },
               ].map(item => <ToggleRow key={item.label} {...item} />)}
             </div>
           )}
 
           {/* ── About ── */}
-          {tab === "about" && (
+          {section === "about" && (
             <div style={{ textAlign: "center", padding: "10px 0" }}>
               <div style={{
                 width: 64, height: 64, borderRadius: 16, margin: "0 auto 14px",
                 background: "linear-gradient(135deg, var(--accent), var(--accent2))",
                 display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 28, boxShadow: "0 0 32px var(--accent-glow)",
-              }}>⬡</div>
+                boxShadow: "0 0 32px var(--accent-glow)",
+              }}>
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none"
+                  stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+              </div>
               <div style={{ fontFamily: "var(--font-display)", fontSize: 20,
                 fontWeight: 800, marginBottom: 4, color: "var(--text-1)" }}>
                 LAN Chat
               </div>
-              <div onClick={handleDevTap} style={{
-                color: "var(--text-3)", fontSize: 12, marginBottom: 4, cursor: "pointer",
-                userSelect: "none",
-              }}>
+              <div
+                onClick={handleDevTap}
+                style={{ color: "var(--text-3)", fontSize: 12, marginBottom: 4,
+                  cursor: "pointer", userSelect: "none" }}
+              >
                 v1.6.0 — Local Network Messenger
                 {devTaps > 0 && devTaps < 5 && (
                   <span style={{ color: "var(--accent)", marginLeft: 6 }}>
-                    ({5 - devTaps} more taps to unlock dev)
+                    ({5 - devTaps} more taps)
                   </span>
                 )}
                 {devUnlocked && (
@@ -454,7 +435,7 @@ export default function SettingsModal() {
                 display: "flex", flexDirection: "column", gap: 10,
               }}>
                 {[
-                  ["Version",    "v1.6.0"],
+                  ["Version",    "v1.6.9"],
                   ["Frontend",   "React + Vite"],
                   ["Realtime",   "Node.js + Socket.IO"],
                   ["API",        "Python Flask"],
@@ -479,6 +460,101 @@ export default function SettingsModal() {
           )}
         </div>
       </div>
+    );
+  }
+
+  // ── Main settings list ───────────────────────────────────────────────────────
+  return (
+    <div style={{ height: "100%", display: "flex", flexDirection: "column",
+      background: "var(--bg-base)", overflowY: "auto" }}>
+
+      {/* Back button — only shown when used as a tab page */}
+      {onBack && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 12,
+          padding: "14px 16px", borderBottom: "1px solid var(--border)",
+          background: "var(--bg-surface)",
+          position: "sticky", top: 0, zIndex: 10, flexShrink: 0,
+        }}>
+          <button className="icon-btn" onClick={onBack}>
+            <ArrowLeft size={18} />
+          </button>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 16,
+            fontWeight: 700, color: "var(--text-1)" }}>
+            Settings
+          </div>
+        </div>
+      )}
+
+      {/* Profile header */}
+      <div style={{
+        padding: "20px 16px", background: "var(--bg-surface)",
+        borderBottom: "1px solid var(--border)",
+        display: "flex", alignItems: "center", gap: 14,
+      }}>
+        <div style={{
+          width: 52, height: 52, borderRadius: "50%",
+          background: `linear-gradient(135deg, ${acColors[0]}, ${acColors[1]})`,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 20, fontWeight: 700, color: "#fff",
+          boxShadow: `0 0 20px ${acColors[0]}44`,
+          flexShrink: 0, overflow: "hidden",
+        }}>
+          {pfp
+            ? <img src={pfp} alt="pfp" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            : initials}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-1)" }}>
+            {user?.display_name || user?.username}
+          </div>
+          <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>
+            @{user?.username}
+          </div>
+          {user?.bio && (
+            <div style={{ fontSize: 12, color: "var(--text-2)", marginTop: 4 }}>
+              {user.bio}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Section list */}
+      <div style={{ flex: 1, padding: "8px 0" }}>
+        {SECTIONS.map(s => (
+          <button
+            key={s.id}
+            onClick={() => setSection(s.id)}
+            style={{
+              display: "flex", alignItems: "center", gap: 14,
+              width: "100%", padding: "14px 16px",
+              background: "transparent", border: "none",
+              borderBottom: "1px solid var(--border-light)",
+              cursor: "pointer", textAlign: "left", transition: "var(--trans)",
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = "var(--bg-hover)"}
+            onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+          >
+            <div style={{
+              width: 38, height: 38, borderRadius: 11,
+              background: "var(--bg-raised)", border: "1px solid var(--border)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: "var(--accent)", flexShrink: 0,
+            }}>
+              {s.icon}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text-1)" }}>
+                {s.label}
+              </div>
+              <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
+                {s.sub}
+              </div>
+            </div>
+            <ChevronRight size={16} color="var(--text-3)" />
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -488,7 +564,7 @@ function ToggleRow({ label, sub, defaultOn = false }) {
   return (
     <div style={{
       display: "flex", alignItems: "center", justifyContent: "space-between",
-      padding: "12px 0", borderBottom: "1px solid var(--border)",
+      padding: "13px 0", borderBottom: "1px solid var(--border)",
     }}>
       <div>
         <div style={{ fontSize: 13, color: "var(--text-1)" }}>{label}</div>

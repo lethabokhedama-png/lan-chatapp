@@ -1,26 +1,23 @@
 {
   "name": "lanchat-frontend",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.6.0",
   "type": "module",
   "scripts": {
-    "start": "npm run build && serve -s dist -l 5173",
-    "dev": "vite --host",
+    "start": "npm run build && node serve.cjs",
     "build": "vite build",
     "preview": "vite preview --host"
   },
   "dependencies": {
-    "@phosphor-icons/react": "^2.1.10",
-    "framer-motion": "^11.0.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
-    "react-feather": "^2.0.10",
     "socket.io-client": "^4.7.2",
-    "zustand": "^4.5.0"
+    "framer-motion": "^11.0.0",
+    "zustand": "^4.5.0",
+    "react-feather": "^2.0.10"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.0",
-    "serve": "^14.0.0",
     "vite": "^5.1.0"
   }
 }

@@ -2,16 +2,17 @@ import React, { useEffect, useState, useRef } from "react";
 import {
   Home, Hash, Plus, Settings, LogOut,
   Wifi, WifiOff, Search, X,
-  ChevronUp, Bell, Lock, Feather, Info, User, MessageSquare
+  ChevronUp, Bell, Lock, Info, User, MessageSquare
 } from "react-feather";
+import { Feather } from "react-feather";
 import useStore from "../lib/store";
 import { rooms as roomsApi, auth, clearToken, users as usersApi } from "../lib/api";
 import { emit } from "../lib/socket";
 import Avatar from "./Avatar";
-import DevPanel from "../features/dev/DevPanel";
 import Modal  from "./Modal";
+import DevPanel from "../features/dev/DevPanel";
 
-const VERSION = "v0.4.0";
+const VERSION = "v1.6.0";
 
 export default function Sidebar() {
   const {
@@ -20,14 +21,19 @@ export default function Sidebar() {
     user, clearAuth, onlineSet, unread, openSettings, userMap,
   } = useStore();
 
-  const [showCh, setShowCh]     = useState(false);
-  const [showDm, setShowDm]     = useState(false);
-  const [allUsers, setAllUsers] = useState([]);
-  const [chName, setChName]     = useState("");
-  const [chTopic, setChTopic]   = useState("");
-  const [search, setSearch]     = useState("");
-  const [popover, setPopover]   = useState(false);
+  const [showCh, setShowCh]       = useState(false);
+  const [showDm, setShowDm]       = useState(false);
+  const [allUsers, setAllUsers]   = useState([]);
+  const [chName, setChName]       = useState("");
+  const [chTopic, setChTopic]     = useState("");
+  const [chMembers, setChMembers] = useState([]);
+  const [search, setSearch]       = useState("");
+  const [popover, setPopover]     = useState(false);
+  const [showDev, setShowDev]     = useState(false);
   const popRef = useRef(null);
+
+  const devUnlocked = user?.username === "lethabok" ||
+    localStorage.getItem("lanchat_dev_unlocked") === "1";
 
   useEffect(() => {
     roomsApi.mine().then(r => setRooms(r)).catch(() => {});
@@ -55,7 +61,13 @@ export default function Sidebar() {
   function dmLabel(room) {
     const otherId = dmOtherId(room);
     const other   = otherId ? userMap[Number(otherId)] : null;
-    return other?.display_name || other?.username || "DM";
+    return other?.display_name || other?.username || "Direct Message";
+  }
+
+  function dmSub(room) {
+    const otherId = dmOtherId(room);
+    const other   = otherId ? userMap[Number(otherId)] : null;
+    return other ? "@" + other.username : "";
   }
 
   async function openRoom(room) {
@@ -65,14 +77,30 @@ export default function Sidebar() {
     closeSidebar();
   }
 
-  function goHome() { setActiveRoom(null); closeSidebar(); }
+  function goHome() {
+    setActiveRoom(null);
+    closeSidebar();
+  }
+
+  async function openGroupModal() {
+    const list = await usersApi.list();
+    setAllUsers(list.filter(u => Number(u.id) !== Number(user?.id)));
+    setChMembers([]);
+    setShowCh(true);
+  }
 
   async function createGroup() {
     if (!chName.trim()) return;
     const room = await roomsApi.createChannel({ name: chName, topic: chTopic, type: "group" });
     setRooms([...rooms, room]);
+    for (const uid of chMembers) {
+      await roomsApi.joinRoom?.(room.id, uid).catch(() => {});
+    }
     openRoom(room);
-    setShowCh(false); setChName(""); setChTopic("");
+    setShowCh(false);
+    setChName("");
+    setChTopic("");
+    setChMembers([]);
   }
 
   async function openDmModal() {
@@ -90,7 +118,9 @@ export default function Sidebar() {
 
   function logout() {
     auth.logout().catch(() => {});
-    clearToken(); clearAuth(); setPopover(false);
+    clearToken();
+    clearAuth();
+    setPopover(false);
   }
 
   const searchLower = search.toLowerCase();
@@ -119,7 +149,9 @@ export default function Sidebar() {
             </div>
             <div>
               <span className="logo-name">LAN Chat</span>
-              <div style={{ fontSize: 9, color: "var(--text-3)", letterSpacing: .5 }}>{VERSION}</div>
+              <div style={{ fontSize: 9, color: "var(--text-3)", letterSpacing: .5 }}>
+                {VERSION}
+              </div>
             </div>
           </div>
           <ConnBadge />
@@ -133,13 +165,16 @@ export default function Sidebar() {
             borderRadius: "var(--radius-sm)", padding: "6px 10px",
           }}>
             <Search size={12} color="var(--text-3)" />
-            <input placeholder="Search…" value={search}
+            <input
+              placeholder="Search..."
+              value={search}
               onChange={e => setSearch(e.target.value)}
               style={{
                 flex: 1, background: "transparent", border: "none",
                 outline: "none", color: "var(--text-1)", fontSize: 12,
                 fontFamily: "var(--font-body)",
-              }} />
+              }}
+            />
             {search && (
               <button className="icon-btn" style={{ width: 16, height: 16 }}
                 onClick={() => setSearch("")}>
@@ -163,62 +198,84 @@ export default function Sidebar() {
             <div style={{ padding: "4px 6px" }}>
               <div className="section-label" style={{ padding: "4px 10px" }}>Results</div>
               {filtered.map(r => (
-                <RoomRow key={r.id} r={r} active={activeRoom?.id === r.id}
+                <RoomRow
+                  key={r.id} r={r}
+                  active={activeRoom?.id === r.id}
                   label={r.type === "dm" ? dmLabel(r) : r.name}
+                  sub={r.type === "dm" ? dmSub(r) : null}
                   online={r.type === "dm" ? onlineSet.has(Number(dmOtherId(r))) : null}
-                  unread={unread[r.id]} userMap={userMap} otherId={dmOtherId(r)}
-                  onClick={() => openRoom(r)} />
+                  unread={unread[r.id]}
+                  onClick={() => openRoom(r)}
+                />
               ))}
               {!filtered.length && (
-                <div style={{ color: "var(--text-3)", fontSize: 12, padding: "6px 14px" }}>No results</div>
+                <div style={{ color: "var(--text-3)", fontSize: 12, padding: "6px 14px" }}>
+                  No results
+                </div>
               )}
             </div>
           )}
 
-          {!filtered && <>
-            {/* Groups */}
-            <div style={{ padding: "6px 0 0" }}>
-              <div className="section-header">
-                <span className="section-label">Groups</span>
-                <button className="icon-btn" onClick={() => setShowCh(true)} title="New group">
-                  <Plus size={14} />
-                </button>
+          {!filtered && (
+            <>
+              {/* Groups */}
+              <div style={{ padding: "6px 0 0" }}>
+                <div className="section-header">
+                  <span className="section-label">Groups</span>
+                  <button className="icon-btn" onClick={openGroupModal} title="New group">
+                    <Plus size={14} />
+                  </button>
+                </div>
+                {channels.length === 0 && (
+                  <div style={{ padding: "3px 18px 8px", fontSize: 11, color: "var(--text-3)" }}>
+                    No groups yet
+                  </div>
+                )}
+                {channels.map(r => (
+                  <RoomRow
+                    key={r.id} r={r}
+                    active={activeRoom?.id === r.id}
+                    label={r.name}
+                    unread={unread[r.id]}
+                    icon={<Hash size={13} color="var(--text-3)" />}
+                    onClick={() => openRoom(r)}
+                  />
+                ))}
               </div>
-              {channels.length === 0 && (
-                <div style={{ padding: "3px 18px 8px", fontSize: 11, color: "var(--text-3)" }}>No groups yet</div>
-              )}
-              {channels.map(r => (
-                <RoomRow key={r.id} r={r} active={activeRoom?.id === r.id}
-                  label={r.name} unread={unread[r.id]}
-                  icon={<Hash size={13} color="var(--text-3)" />}
-                  onClick={() => openRoom(r)} />
-              ))}
-            </div>
 
-            {/* DMs */}
-            <div style={{ padding: "6px 0 0" }}>
-              <div className="section-header">
-                <span className="section-label">Messages</span>
-                <button className="icon-btn" onClick={openDmModal} title="New message">
-                  <Plus size={14} />
-                </button>
+              {/* DMs */}
+              <div style={{ padding: "6px 0 0" }}>
+                <div className="section-header">
+                  <span className="section-label">Messages</span>
+                  <button className="icon-btn" onClick={openDmModal} title="New message">
+                    <Plus size={14} />
+                  </button>
+                </div>
+                {dms.length === 0 && (
+                  <div style={{ padding: "3px 18px 8px", fontSize: 11, color: "var(--text-3)" }}>
+                    No messages yet
+                  </div>
+                )}
+                {dms.map(r => {
+                  const otherId = dmOtherId(r);
+                  const online  = onlineSet.has(Number(otherId));
+                  return (
+                    <RoomRow
+                      key={r.id} r={r}
+                      active={activeRoom?.id === r.id}
+                      label={dmLabel(r)}
+                      sub={dmSub(r)}
+                      online={online}
+                      unread={unread[r.id]}
+                      userMap={userMap}
+                      otherId={otherId}
+                      onClick={() => openRoom(r)}
+                    />
+                  );
+                })}
               </div>
-              {dms.length === 0 && (
-                <div style={{ padding: "3px 18px 8px", fontSize: 11, color: "var(--text-3)" }}>No messages yet</div>
-              )}
-              {dms.map(r => {
-                const otherId = dmOtherId(r);
-                const online  = onlineSet.has(Number(otherId));
-                return (
-                  <RoomRow key={r.id} r={r} active={activeRoom?.id === r.id}
-                    label={dmLabel(r)} online={online} unread={unread[r.id]}
-                    userMap={userMap} otherId={otherId}
-                    sub={userMap[Number(otherId)] ? "@" + userMap[Number(otherId)]?.username : null}
-                    onClick={() => openRoom(r)} />
-                );
-              })}
-            </div>
-          </>}
+            </>
+          )}
         </div>
 
         {/* Footer with popover */}
@@ -230,36 +287,64 @@ export default function Sidebar() {
               borderRadius: "var(--radius)", boxShadow: "0 -8px 32px rgba(0,0,0,.5)",
               overflow: "hidden", zIndex: 50,
             }}>
-              <div style={{ padding: "10px 14px 8px", borderBottom: "1px solid var(--border)" }}>
+              <div style={{
+                padding: "10px 14px 8px",
+                borderBottom: "1px solid var(--border)",
+              }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>
                   {user?.display_name || user?.username}
                 </div>
-                <div style={{ fontSize: 11, color: "var(--text-3)" }}>@{user?.username}</div>
+                <div style={{ fontSize: 11, color: "var(--text-3)" }}>
+                  @{user?.username}
+                </div>
               </div>
+
               {[
-                { icon: <User size={14} />,     label: "Account",      page: "account" },
+                { icon: <User size={14} />,     label: "Account",       page: "account" },
                 { icon: <Bell size={14} />,     label: "Notifications", page: "notifications" },
-                { icon: <Settings size={14} />, label: "Appearance",   page: "appearance" },
-                { icon: <Lock size={14} />,     label: "Privacy",      page: "privacy" },
-                { icon: <Info size={14} />,     label: "About",        page: "about" },
-                ...(user?.username === "lethabok" ? [{ icon: <Settings size={14} />, label: "Dev Panel", page: "dev" }] : []),
+                { icon: <Settings size={14} />, label: "Appearance",    page: "appearance" },
+                { icon: <Lock size={14} />,     label: "Privacy",       page: "privacy" },
+                { icon: <Info size={14} />,     label: "About",         page: "about" },
               ].map(item => (
-                <PopItem key={item.label} icon={item.icon} label={item.label}
-                  onClick={() => item.page === "dev" ? () => { setShowDev(true); setPopover(false); } : () => { openSettings(item.page); setPopover(false); }} />
+                <PopItem
+                  key={item.label}
+                  icon={item.icon}
+                  label={item.label}
+                  onClick={() => {
+                    openSettings(item.page);
+                    setPopover(false);
+                  }}
+                />
               ))}
+
+              {devUnlocked && (
+                <PopItem
+                  icon={<Settings size={14} />}
+                  label="Dev Panel"
+                  color="var(--accent)"
+                  onClick={() => { setShowDev(true); setPopover(false); }}
+                />
+              )}
+
               <div style={{ borderTop: "1px solid var(--border)" }}>
-                <PopItem icon={<LogOut size={14} />} label="Sign out"
-                  color="var(--red)" onClick={logout} />
+                <PopItem
+                  icon={<LogOut size={14} />}
+                  label="Sign out"
+                  color="var(--red)"
+                  onClick={logout}
+                />
               </div>
             </div>
           )}
 
           {/* Account row */}
-          <div onClick={() => setPopover(v => !v)} style={{
-            display: "flex", alignItems: "center", gap: 9,
-            padding: "10px 12px", cursor: "pointer", transition: "var(--trans)",
-            background: popover ? "var(--bg-active)" : "transparent",
-          }}
+          <div
+            onClick={() => setPopover(v => !v)}
+            style={{
+              display: "flex", alignItems: "center", gap: 9,
+              padding: "10px 12px", cursor: "pointer", transition: "var(--trans)",
+              background: popover ? "var(--bg-active)" : "transparent",
+            }}
             onMouseEnter={e => { if (!popover) e.currentTarget.style.background = "var(--bg-hover)"; }}
             onMouseLeave={e => { e.currentTarget.style.background = popover ? "var(--bg-active)" : "transparent"; }}
           >
@@ -269,47 +354,135 @@ export default function Sidebar() {
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="footer-name">{user?.display_name || user?.username}</div>
-              <div style={{ fontSize: 10, color: "var(--green)" }}>● online</div>
+              <div style={{ fontSize: 10, color: "var(--green)" }}>online</div>
             </div>
-            <ChevronUp size={13} color="var(--text-3)"
-              style={{ transform: popover ? "rotate(0deg)" : "rotate(180deg)", transition: "transform 200ms" }} />
+            <ChevronUp
+              size={13}
+              color="var(--text-3)"
+              style={{
+                transform: popover ? "rotate(0deg)" : "rotate(180deg)",
+                transition: "transform 200ms",
+              }}
+            />
           </div>
         </div>
       </div>
+
+      {/* Dev Panel */}
+      {showDev && <DevPanel onClose={() => setShowDev(false)} />}
 
       {/* Create group modal */}
       <Modal open={showCh} onClose={() => setShowCh(false)} title="New Group">
         <div className="form-group">
           <label className="label">Group Name</label>
-          <input className="input" placeholder="e.g. squad" value={chName}
+          <input
+            className="input"
+            placeholder="e.g. squad"
+            value={chName}
             onChange={e => setChName(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && createGroup()} />
+          />
         </div>
         <div className="form-group">
           <label className="label">Description (optional)</label>
-          <input className="input" placeholder="What's this group about?" value={chTopic}
-            onChange={e => setChTopic(e.target.value)} />
+          <input
+            className="input"
+            placeholder="What is this group about?"
+            value={chTopic}
+            onChange={e => setChTopic(e.target.value)}
+          />
+        </div>
+        <div className="form-group">
+          <label className="label">Add Members</label>
+          <div style={{
+            display: "flex", flexDirection: "column", gap: 4,
+            maxHeight: 200, overflowY: "auto",
+          }}>
+            {allUsers.map(u => {
+              const sel = chMembers.includes(u.id);
+              return (
+                <div
+                  key={u.id}
+                  onClick={() => setChMembers(m =>
+                    sel ? m.filter(x => x !== u.id) : [...m, u.id]
+                  )}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 10,
+                    padding: "8px 10px", borderRadius: "var(--radius-sm)",
+                    cursor: "pointer",
+                    background: sel ? "var(--bg-active)" : "transparent",
+                    border: sel ? "1px solid var(--accent-dim)" : "1px solid transparent",
+                    transition: "var(--trans)",
+                  }}
+                >
+                  <div style={{
+                    width: 28, height: 28, borderRadius: "50%",
+                    background: "linear-gradient(135deg, var(--accent), var(--accent2))",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 11, fontWeight: 700, color: "#fff", flexShrink: 0,
+                  }}>
+                    {(u.display_name || u.username || "?")[0].toUpperCase()}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-1)" }}>
+                      {u.display_name || u.username}
+                    </div>
+                    <div style={{ fontSize: 10, color: "var(--text-3)" }}>@{u.username}</div>
+                  </div>
+                  {sel && (
+                    <div style={{
+                      width: 18, height: 18, borderRadius: "50%",
+                      background: "var(--accent)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      flexShrink: 0,
+                    }}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+                        stroke="white" strokeWidth="3" strokeLinecap="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {chMembers.length > 0 && (
+            <div style={{ fontSize: 11, color: "var(--accent)", marginTop: 6 }}>
+              {chMembers.length} member{chMembers.length !== 1 ? "s" : ""} selected
+            </div>
+          )}
         </div>
         <div className="modal-footer">
           <button className="btn btn-ghost" onClick={() => setShowCh(false)}>Cancel</button>
-          <button className="btn btn-primary" onClick={createGroup}>Create</button>
+          <button
+            className="btn btn-primary"
+            onClick={createGroup}
+            disabled={!chName.trim()}
+          >
+            Create Group
+          </button>
         </div>
       </Modal>
 
-      {showDev && <DevPanel onClose={() => setShowDev(false)} />}
-
       {/* New DM modal */}
       <Modal open={showDm} onClose={() => setShowDm(false)} title="New Direct Message">
-        <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 320, overflowY: "auto" }}>
+        <div style={{
+          display: "flex", flexDirection: "column", gap: 4,
+          maxHeight: 320, overflowY: "auto",
+        }}>
           {allUsers.map(u => {
             const online = onlineSet.has(Number(u.id));
             return (
-              <div key={u.id} onClick={() => startDm(u.id)} style={{
-                display: "flex", alignItems: "center", gap: 10,
-                padding: "9px 10px", borderRadius: "var(--radius-sm)", cursor: "pointer",
-              }}
+              <div
+                key={u.id}
+                onClick={() => startDm(u.id)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  padding: "9px 10px", borderRadius: "var(--radius-sm)",
+                  cursor: "pointer", transition: "var(--trans)",
+                }}
                 onMouseEnter={e => e.currentTarget.style.background = "var(--bg-hover)"}
-                onMouseLeave={e => e.currentTarget.style.background = ""}>
+                onMouseLeave={e => e.currentTarget.style.background = ""}
+              >
                 <Avatar user={u} size="sm" />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-1)" }}>
@@ -323,7 +496,7 @@ export default function Sidebar() {
                   background: online ? "rgba(78,203,113,.1)" : "transparent",
                   border: `1px solid ${online ? "rgba(78,203,113,.3)" : "var(--border)"}`,
                 }}>
-                  {online ? "● online" : "offline"}
+                  {online ? "online" : "offline"}
                 </div>
               </div>
             );
@@ -342,48 +515,53 @@ export default function Sidebar() {
   );
 }
 
-function RoomRow({ r, active, label, icon, online, unread, userMap, otherId, onClick, sub }) {
+function RoomRow({ r, active, label, sub, icon, online, unread, userMap, otherId, onClick }) {
   return (
     <div className={`room-item${active ? " active" : ""}`} onClick={onClick}>
-      {icon
-        ? <span style={{ flexShrink: 0, display: "flex", alignItems: "center" }}>{icon}</span>
-        : otherId && userMap
-        ? <div style={{ position: "relative", width: 20, height: 20, flexShrink: 0 }}>
-            <div style={{
-              width: 20, height: 20, borderRadius: "50%",
-              background: "linear-gradient(135deg, var(--accent), var(--accent2))",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 9, fontWeight: 700, color: "#fff",
-            }}>
-              {(label || "?")[0].toUpperCase()}
-            </div>
-            <div style={{
-              position: "absolute", bottom: 0, right: 0,
-              width: 7, height: 7, borderRadius: "50%",
-              background: online ? "var(--green)" : "var(--text-3)",
-              border: "1.5px solid var(--bg-sidebar)",
-            }} />
+      {icon ? (
+        <span style={{ flexShrink: 0, display: "flex", alignItems: "center" }}>{icon}</span>
+      ) : otherId && userMap ? (
+        <div style={{ position: "relative", width: 20, height: 20, flexShrink: 0 }}>
+          <div style={{
+            width: 20, height: 20, borderRadius: "50%",
+            background: "linear-gradient(135deg, var(--accent), var(--accent2))",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 9, fontWeight: 700, color: "#fff",
+          }}>
+            {(label || "?")[0].toUpperCase()}
           </div>
-        : null
-      }
+          <div style={{
+            position: "absolute", bottom: 0, right: 0,
+            width: 7, height: 7, borderRadius: "50%",
+            background: online ? "var(--green)" : "var(--text-3)",
+            border: "1.5px solid var(--bg-sidebar)",
+            boxShadow: online ? "0 0 4px var(--green)" : "none",
+          }} />
+        </div>
+      ) : null}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="room-item-name">{label}</div>
         {sub && <div className="room-item-sub">{sub}</div>}
       </div>
-      {!!unread && <div className="unread-badge">{unread > 99 ? "99+" : unread}</div>}
+      {!!unread && (
+        <div className="unread-badge">{unread > 99 ? "99+" : unread}</div>
+      )}
     </div>
   );
 }
 
 function PopItem({ icon, label, color, onClick }) {
   return (
-    <button onClick={onClick} style={{
-      display: "flex", alignItems: "center", gap: 10,
-      width: "100%", padding: "9px 14px",
-      background: "transparent", border: "none",
-      color: color || "var(--text-2)", cursor: "pointer",
-      fontSize: 13, fontFamily: "var(--font-body)", textAlign: "left",
-    }}
+    <button
+      onClick={onClick}
+      style={{
+        display: "flex", alignItems: "center", gap: 10,
+        width: "100%", padding: "9px 14px",
+        background: "transparent", border: "none",
+        color: color || "var(--text-2)", cursor: "pointer",
+        fontSize: 13, fontFamily: "var(--font-body)", textAlign: "left",
+        transition: "var(--trans)",
+      }}
       onMouseEnter={e => e.currentTarget.style.background = "var(--bg-hover)"}
       onMouseLeave={e => e.currentTarget.style.background = "transparent"}
     >
