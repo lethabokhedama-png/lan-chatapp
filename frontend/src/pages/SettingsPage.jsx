@@ -554,6 +554,29 @@ export default function SettingsPage({ onBack, devUnlocked, onOpenDev }) {
         ))}
       </div>
 
+      {/* Logout button */}
+      <div style={{ padding: "12px 16px", borderTop: "1px solid var(--border)" }}>
+        <button onClick={logout} style={{
+          width: "100%", padding: "12px",
+          background: "rgba(224,92,92,.08)",
+          border: "1px solid rgba(224,92,92,.3)",
+          borderRadius: "var(--radius-sm)", color: "var(--red)",
+          fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 600,
+          cursor: "pointer", display: "flex", alignItems: "center",
+          justifyContent: "center", gap: 8, transition: "var(--trans)",
+        }}
+          onMouseEnter={e => e.currentTarget.style.background = "rgba(224,92,92,.15)"}
+          onMouseLeave={e => e.currentTarget.style.background = "rgba(224,92,92,.08)"}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+          Sign Out
+        </button>
+      </div>
+
       {/* Dev button — lethabok only */}
       {devUnlocked && onOpenDev && (
         <div style={{ padding: "12px 16px", borderTop: "1px solid var(--border)" }}>
