@@ -72,7 +72,7 @@ function applyTheme(t) {
   r.style.setProperty("--receipt-seen",      v.accent);
 }
 
-export default function SettingsPage({ onBack }) {
+export default function SettingsPage({ onBack, devUnlocked, onOpenDev }) {
   const { user, setAuth, token, clearAuth } = useStore();
   const [section, setSection]     = useState(null);
   const [displayName, setDisplayName] = useState(user?.display_name || "");
@@ -435,7 +435,7 @@ export default function SettingsPage({ onBack }) {
                 display: "flex", flexDirection: "column", gap: 10,
               }}>
                 {[
-                  ["Version",    "v1.6.9"],
+                  ["Version",    "v1.6.0"],
                   ["Frontend",   "React + Vite"],
                   ["Realtime",   "Node.js + Socket.IO"],
                   ["API",        "Python Flask"],
@@ -555,6 +555,31 @@ export default function SettingsPage({ onBack }) {
           </button>
         ))}
       </div>
+
+      {/* Dev button — lethabok only */}
+      {devUnlocked && onOpenDev && (
+        <div style={{ padding: "12px 16px", borderTop: "1px solid var(--border)" }}>
+          <button onClick={onOpenDev} style={{
+            width: "100%", padding: "12px",
+            background: "rgba(79,142,247,.08)",
+            border: "1px solid var(--accent-dim)",
+            borderRadius: "var(--radius-sm)",
+            color: "var(--accent)", fontFamily: "var(--font-body)",
+            fontSize: 13, fontWeight: 600, cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+            transition: "var(--trans)",
+          }}
+            onMouseEnter={e => e.currentTarget.style.background = "rgba(79,142,247,.15)"}
+            onMouseLeave={e => e.currentTarget.style.background = "rgba(79,142,247,.08)"}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <polyline points="16 18 22 12 16 6"/>
+              <polyline points="8 6 2 12 8 18"/>
+            </svg>
+            Open Dev Panel
+          </button>
+        </div>
+      )}
     </div>
   );
 }
