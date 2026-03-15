@@ -85,9 +85,7 @@ export default function SettingsPage({ onBack, devUnlocked, onOpenDev }) {
   const [pfp, setPfp]             = useState(user?.avatar_url || null);
   const [saved, setSaved]         = useState("");
   const [devTaps, setDevTaps]     = useState(0);
-  const [devUnlocked, setDevUnlocked] = useState(
-    () => user?.username === "lethabok" || localStorage.getItem("lanchat_dev_unlocked") === "1"
-  );
+
   const [theme, setTheme] = useState(() => localStorage.getItem("lanchat_theme") || "dark");
   const pfpRef = useRef(null);
 
