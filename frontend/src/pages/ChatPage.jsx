@@ -5,7 +5,6 @@ import {
   Bell, BellOff, Archive, User,
   Home
 } from "react-feather";
-import Sidebar      from "../ui/Sidebar";
 import BottomNav    from "../ui/BottomNav";
 import ChatWindow   from "../features/chat/ChatWindow";
 import ProfilePanel from "../features/profile/ProfilePanel";
@@ -77,7 +76,6 @@ export default function ChatPage() {
       display: "flex", height: "100dvh", width: "100vw",
       overflow: "hidden", position: "fixed", inset: 0,
     }}>
-      <Sidebar />
       <div style={{
         flex: 1, minWidth: 0, display: "flex", flexDirection: "column",
         height: "100%", overflow: "hidden", paddingBottom: "60px",
