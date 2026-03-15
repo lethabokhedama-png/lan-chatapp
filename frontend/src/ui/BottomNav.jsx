@@ -6,40 +6,12 @@ export default function BottomNav({ active, onNavigate }) {
   const { unread, onlineSet, rooms } = useStore();
 
   const totalUnread = Object.values(unread).reduce((a, b) => a + b, 0);
-  const onlineCount = onlineSet.size;
+  const onlineCount = Math.max(0, onlineSet.size - 1);
 
   const tabs = [
-    {
-      id: "home",
-      icon: Home,
-      label: "Home",
-      badge: null,
-    },
-    {
-      id: "messages",
-      icon: MessageCircle,
-      label: "Messages",
-      badge: totalUnread > 0 ? totalUnread : null,
-    },
-    {
-      id: "groups",
-      icon: Users,
-      label: "Groups",
-      badge: null,
-    },
-    {
-      id: "online",
-      icon: Radio,
-      label: "Online",
-      badge: onlineCount > 0 ? onlineCount : null,
-      badgeColor: "var(--green)",
-    },
-    {
-      id: "settings",
-      icon: Settings,
-      label: "Settings",
-      badge: null,
-    },
+    { id: "home",     icon: Home,     label: "Home",     badge: null },
+    { id: "groups",   icon: Users,    label: "Groups",   badge: null },
+    { id: "settings", icon: Settings, label: "Settings", badge: null },
   ];
 
   return (

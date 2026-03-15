@@ -49,7 +49,7 @@ export default function ChatPage() {
 
   function onNavigate(tab) {
     setNavTab(tab);
-    if (tab === "home") useStore.getState().setActiveRoom(null);
+    useStore.getState().setActiveRoom(null);
   }
 
   if (navTab === "settings" && !activeRoom) {

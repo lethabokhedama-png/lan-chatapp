@@ -18,7 +18,7 @@ export default function AuthPage() {
     try {
       const res = tab === "login"
         ? await auth.login({ username: form.username, password: form.password })
-        : await auth.signup({ username: form.username, display_name: form.display_name, password: form.password });
+        : await auth.register({ username: form.username, display_name: form.display_name, password: form.password });
       setToken(res.token);
       setAuth(res.user, res.token);
     } catch (err) {
@@ -75,7 +75,7 @@ export default function AuthPage() {
           background: "var(--bg-raised)", borderRadius: "var(--radius-sm)",
           padding: 4, marginBottom: 22,
         }}>
-          {["login", "signup"].map(t => (
+          {["login", "register"].map(t => (
             <button key={t} onClick={() => { setTab(t); setError(""); }} style={{
               padding: "8px", border: "none", cursor: "pointer",
               borderRadius: 6, fontSize: 11, fontWeight: 500,
@@ -84,7 +84,7 @@ export default function AuthPage() {
               background: tab === t ? "var(--bg-active)" : "transparent",
               color: tab === t ? "var(--text-1)" : "var(--text-3)",
             }}>
-              {t === "login" ? "Sign In" : "Sign Up"}
+              {t === "login" ? "Login" : "Register"}
             </button>
           ))}
         </div>
@@ -94,7 +94,7 @@ export default function AuthPage() {
             value={form.username} onChange={set("username")} />
 
           <AnimatePresence>
-            {tab === "signup" && (
+            {tab === "register" && (
               <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }} style={{ overflow: "hidden" }}>
                 <Field label="Display Name" type="text" placeholder="Your Name"
@@ -122,7 +122,7 @@ export default function AuthPage() {
             cursor: busy ? "not-allowed" : "pointer", opacity: busy ? .6 : 1,
             transition: "var(--trans)", boxShadow: "0 4px 20px var(--accent-glow)",
           }}>
-            {busy ? "…" : tab === "login" ? "Sign In →" : "Create Account →"}
+            {busy ? "…" : tab === "login" ? "Login →" : "Create Account →"}
           </button>
         </form>
       </motion.div>
