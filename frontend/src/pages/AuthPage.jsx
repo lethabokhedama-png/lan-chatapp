@@ -105,17 +105,18 @@ export default function AuthPage() {
             )}
           </AnimatePresence>
 
-          <div style={{ position:"relative" }}>
-            <Field label="Password" type={showPw ? "text" : "password"} placeholder="••••••••"
-              value={form.password} onChange={set("password")} />
-            <button type="button" onClick={() => setShowPw(v => !v)} style={{
-              position:"absolute", right:10, top:"50%", transform:"translateY(-50%)",
-              background:"none", border:"none", cursor:"pointer",
-              color:"var(--text-3)", padding:4, display:"flex", alignItems:"center",
-            }}>
-              {showPw ? <EyeOff size={15}/> : <Eye size={15}/>}
-            </button>
-          </div>
+          <Field label="Password" type={showPw ? "text" : "password"} placeholder="••••••••"
+              value={form.password} onChange={set("password")}
+              rightSlot={
+                <button type="button" onClick={() => setShowPw(v => !v)} style={{
+                  background:"none", border:"none", cursor:"pointer",
+                  color:"var(--text-3)", padding:4,
+                  display:"flex", alignItems:"center",
+                }}>
+                  {showPw ? <EyeOff size={15}/> : <Eye size={15}/>}
+                </button>
+              }
+            />
 
           {error && (
             <div style={{
@@ -156,7 +157,7 @@ export default function AuthPage() {
   );
 }
 
-function Field({ label, type, placeholder, value, onChange }) {
+function Field({ label, type, placeholder, value, onChange, rightSlot }) {
   const [focused, setFocused] = useState(false);
   return (
     <div style={{ marginBottom: 14 }}>
@@ -164,6 +165,7 @@ function Field({ label, type, placeholder, value, onChange }) {
         display: "block", fontSize: 10, textTransform: "uppercase",
         letterSpacing: 1.2, color: "var(--text-3)", marginBottom: 6, fontWeight: 600,
       }}>{label}</label>
+      <div style={{ position:"relative", display:"flex", alignItems:"center" }}>
       <input type={type} placeholder={placeholder} value={value} onChange={onChange}
         required
         style={{
@@ -176,7 +178,18 @@ function Field({ label, type, placeholder, value, onChange }) {
         }}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
+        style={{ paddingRight: rightSlot ? 36 : undefined }}
       />
+      {rightSlot && (
+        <div style={{
+          position:"absolute", right:8, top:"50%",
+          transform:"translateY(-50%)",
+          display:"flex", alignItems:"center",
+        }}>
+          {rightSlot}
+        </div>
+      )}
+      </div>
     </div>
   );
 }

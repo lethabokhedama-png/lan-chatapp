@@ -124,16 +124,22 @@ function LandingPanel({ navTab, setNavTab }) {
 
 // ── Home Tab ──────────────────────────────────────────────────────────────────
 
+// ── HomeTab — drop this function into ChatPage.jsx replacing the existing HomeTab ──
+
 function HomeTab({ user, online, others, dms, onOpen, setNavTab }) {
-  const { rooms, userMap, onlineSet, messages } = useStore();
+  const { rooms, userMap, onlineSet, messages, unread } = useStore();
   const time   = useClock();
   const [apiOk, setApiOk] = useState(null);
+  const [rtOk,  setRtOk]  = useState(null);
 
   useEffect(() => {
     const BASE = import.meta.env.VITE_API_URL || "";
-    fetch(BASE + "/api/health")
-      .then(r => setApiOk(r.ok))
-      .catch(() => setApiOk(false));
+    fetch(BASE + "/api/health").then(r => setApiOk(r.ok)).catch(() => setApiOk(false));
+    import("../lib/socket").then(m => setRtOk(!!m.getSocket()?.connected));
+    const t = setInterval(() => {
+      import("../lib/socket").then(m => setRtOk(!!m.getSocket()?.connected));
+    }, 3000);
+    return () => clearInterval(t);
   }, []);
 
   const initials = (user?.display_name || user?.username || "?")
@@ -151,64 +157,106 @@ function HomeTab({ user, online, others, dms, onOpen, setNavTab }) {
     .flatMap(([roomId, msgs]) =>
       (msgs || []).slice(-1).map(m => ({
         ...m, roomId,
-        roomName: rooms.find(r => r.id === roomId)?.name || roomId,
+        roomName: rooms.find(r => r.id === roomId)?.name || "DM",
       }))
     )
-    .filter(m => m.created_at)
+    .filter(m => m.created_at && Number(m.sender_id) !== Number(user?.id))
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-    .slice(0, 5);
+    .slice(0, 6);
+
+  const totalUnread = Object.values(unread).reduce((a, b) => a + b, 0);
+  const groups = rooms.filter(r => r.type === "group" || r.type === "channel");
 
   return (
-    <div style={{ flex: 1, overflowY: "auto", padding: "0 0 12px" }}>
+    <div style={{ flex: 1, overflowY: "auto" }}>
 
-      {/* Profile + clock */}
+      {/* ── Hero header ── */}
       <div style={{
-        padding: "16px 16px 14px",
+        padding: "20px 16px 16px",
+        background: "linear-gradient(160deg, var(--bg-surface) 0%, var(--bg-raised) 100%)",
         borderBottom: "1px solid var(--border)",
-        background: "var(--bg-surface)",
+        position: "relative", overflow: "hidden",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        {/* Glow orb */}
+        <div style={{
+          position: "absolute", top: -40, right: -40,
+          width: 160, height: 160, borderRadius: "50%",
+          background: "var(--accent-glow)",
+          filter: "blur(40px)", pointerEvents: "none",
+        }} />
+
+        <div style={{ display: "flex", alignItems: "center", gap: 14, position: "relative" }}>
           <div style={{ position: "relative", flexShrink: 0 }}>
             <div style={{
-              width: 52, height: 52, borderRadius: "50%",
+              width: 54, height: 54, borderRadius: "50%",
               background: "linear-gradient(135deg, var(--accent), var(--accent2))",
               display: "flex", alignItems: "center", justifyContent: "center",
               fontSize: 20, fontWeight: 700, color: "#fff",
-              boxShadow: "0 0 20px var(--accent-glow)", overflow: "hidden",
+              boxShadow: "0 0 24px var(--accent-glow)", overflow: "hidden",
             }}>
               {user?.avatar_url
                 ? <img src={user.avatar_url} alt="pfp"
-                    style={{ width:"100%",height:"100%",objectFit:"cover" }} />
+                    style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                 : initials}
             </div>
             <div style={{
               position: "absolute", bottom: 1, right: 1,
               width: 14, height: 14, borderRadius: "50%",
-              background: "var(--green)",
-              border: "2px solid var(--bg-surface)",
-              boxShadow: "0 0 6px var(--green)",
+              background: "var(--green)", border: "2.5px solid var(--bg-surface)",
+              boxShadow: "0 0 8px var(--green)",
             }} />
           </div>
+
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontFamily: "var(--font-display)", fontSize: 17,
-              fontWeight: 800, color: "var(--text-1)" }}>
+            <div style={{
+              fontFamily: "var(--font-display)", fontSize: 18,
+              fontWeight: 800, color: "var(--text-1)",
+            }}>
               Hey, {user?.display_name || user?.username}
             </div>
-            {online.length > 0 ? (
-              <div onClick={() => setNavTab("online")}
-                style={{ fontSize: 12, color: "var(--green)", marginTop: 2, cursor: "pointer" }}>
-                {online.length} {online.length === 1 ? "person" : "people"} online — tap to see
-              </div>
-            ) : (
-              <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>
-                Everyone is offline right now
+            {user?.bio && (
+              <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
+                {user.bio}
               </div>
             )}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+              <div style={{
+                display: "flex", alignItems: "center", gap: 4,
+                fontSize: 11, color: "var(--green)",
+              }}>
+                <div style={{ width: 6, height: 6, borderRadius: "50%",
+                  background: "var(--green)", boxShadow: "0 0 4px var(--green)" }} />
+                online
+              </div>
+              {online.length > 0 && (
+                <button onClick={() => setNavTab("online")} style={{
+                  fontSize: 11, color: "var(--accent)",
+                  background: "var(--accent-glow)", border: "1px solid var(--accent-dim)",
+                  borderRadius: 20, padding: "1px 8px", cursor: "pointer",
+                  fontFamily: "var(--font-body)",
+                }}>
+                  {online.length} other{online.length !== 1 ? "s" : ""} online
+                </button>
+              )}
+              {totalUnread > 0 && (
+                <button onClick={() => setNavTab("messages")} style={{
+                  fontSize: 11, color: "#fff",
+                  background: "var(--red)", border: "none",
+                  borderRadius: 20, padding: "1px 8px", cursor: "pointer",
+                  fontFamily: "var(--font-body)", fontWeight: 600,
+                }}>
+                  {totalUnread} unread
+                </button>
+              )}
+            </div>
           </div>
-          {/* Live clock */}
+
+          {/* Clock */}
           <div style={{ textAlign: "right", flexShrink: 0 }}>
-            <div style={{ fontFamily: "monospace", fontSize: 14,
-              fontWeight: 700, color: "var(--accent)", letterSpacing: 1 }}>
+            <div style={{
+              fontFamily: "monospace", fontSize: 16, fontWeight: 700,
+              color: "var(--accent)", letterSpacing: 1,
+            }}>
               {timeStr}
             </div>
             <div style={{ fontSize: 9, color: "var(--text-3)", marginTop: 2 }}>
@@ -218,27 +266,53 @@ function HomeTab({ user, online, others, dms, onOpen, setNavTab }) {
         </div>
       </div>
 
-      {/* Stats bar */}
+      {/* ── Stats row ── */}
       <div style={{
         display: "grid", gridTemplateColumns: "repeat(4, 1fr)",
         borderBottom: "1px solid var(--border)",
-        background: "var(--bg-raised)",
       }}>
         {[
-          { label: "Online",  value: online.length,       color: "var(--green)"  },
-          { label: "Users",   value: others.length + 1,   color: "var(--accent)" },
-          { label: "Rooms",   value: rooms.length,         color: "var(--accent2)"},
-          { label: "API",
+          {
+            label: "Online", value: online.length,
+            color: online.length > 0 ? "var(--green)" : "var(--text-3)",
+            dot: online.length > 0,
+            onClick: () => setNavTab("online"),
+          },
+          {
+            label: "Chats", value: dms.length,
+            color: "var(--accent)",
+            onClick: () => setNavTab("messages"),
+          },
+          {
+            label: "Groups", value: groups.length,
+            color: "var(--accent2)",
+            onClick: () => setNavTab("groups"),
+          },
+          {
+            label: "API",
             value: apiOk === null ? "…" : apiOk ? "OK" : "Down",
-            color: apiOk === null ? "var(--text-3)" : apiOk ? "var(--green)" : "var(--red)" },
+            color: apiOk === null ? "var(--text-3)" : apiOk ? "var(--green)" : "var(--red)",
+          },
         ].map((s, i) => (
-          <div key={s.label} style={{
-            padding: "10px 0", textAlign: "center",
+          <div key={s.label} onClick={s.onClick} style={{
+            padding: "12px 0", textAlign: "center",
             borderRight: i < 3 ? "1px solid var(--border)" : "none",
-          }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: s.color,
-              fontFamily: "var(--font-display)" }}>
-              {s.value}
+            cursor: s.onClick ? "pointer" : "default",
+            background: "var(--bg-raised)",
+            transition: "var(--trans)",
+          }}
+            onMouseEnter={e => s.onClick && (e.currentTarget.style.background = "var(--bg-hover)")}
+            onMouseLeave={e => s.onClick && (e.currentTarget.style.background = "var(--bg-raised)")}>
+            <div style={{ display: "flex", alignItems: "center",
+              justifyContent: "center", gap: 4 }}>
+              {s.dot && (
+                <div style={{ width: 6, height: 6, borderRadius: "50%",
+                  background: "var(--green)", boxShadow: "0 0 4px var(--green)" }} />
+              )}
+              <div style={{ fontSize: 18, fontWeight: 700,
+                fontFamily: "var(--font-display)", color: s.color }}>
+                {s.value}
+              </div>
             </div>
             <div style={{ fontSize: 9, color: "var(--text-3)",
               textTransform: "uppercase", letterSpacing: .8, marginTop: 1 }}>
@@ -248,12 +322,153 @@ function HomeTab({ user, online, others, dms, onOpen, setNavTab }) {
         ))}
       </div>
 
-      <div style={{ padding: "12px 12px 0" }}>
+      <div style={{ padding: "12px 12px 80px" }}>
 
-        {/* Activity feed */}
+        {/* ── Who's online now ── */}
+        {online.length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <SectionTitle title="Online now" accent />
+            <div style={{ display: "flex", gap: 10, overflowX: "auto",
+              paddingBottom: 4, scrollbarWidth: "none" }}>
+              {online.map(u => {
+                const init = (u.display_name || u.username || "?")
+                  .split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+                return (
+                  <div key={u.id} style={{
+                    display: "flex", flexDirection: "column",
+                    alignItems: "center", gap: 5, flexShrink: 0,
+                    cursor: "pointer",
+                  }} onClick={() => {
+                    roomsApi?.createDm?.({ user_id: u.id }).then(room => {
+                      useStore.getState().setActiveRoom(room);
+                    }).catch(() => {});
+                  }}>
+                    <div style={{ position: "relative" }}>
+                      <div style={{
+                        width: 46, height: 46, borderRadius: "50%",
+                        background: "linear-gradient(135deg, var(--accent), var(--accent2))",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 16, fontWeight: 700, color: "#fff",
+                        border: "2px solid var(--green)",
+                        boxShadow: "0 0 10px var(--green)",
+                        overflow: "hidden",
+                      }}>
+                        {u.avatar_url
+                          ? <img src={u.avatar_url} alt="" style={{ width:"100%",height:"100%",objectFit:"cover" }} />
+                          : init}
+                      </div>
+                      <div style={{
+                        position: "absolute", bottom: 0, right: 0,
+                        width: 12, height: 12, borderRadius: "50%",
+                        background: "var(--green)", border: "2px solid var(--bg-base)",
+                        boxShadow: "0 0 6px var(--green)",
+                      }} />
+                    </div>
+                    <div style={{ fontSize: 10, color: "var(--text-2)",
+                      maxWidth: 52, textAlign: "center",
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {u.display_name || u.username}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── Offline users ── */}
+        {others.filter(u => !onlineSet.has(Number(u.id))).length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <SectionTitle title="Offline" />
+            <div style={{ display: "flex", gap: 8, overflowX: "auto",
+              paddingBottom: 4, scrollbarWidth: "none" }}>
+              {others.filter(u => !onlineSet.has(Number(u.id))).map(u => {
+                const init = (u.display_name || u.username || "?")[0].toUpperCase();
+                return (
+                  <div key={u.id} style={{
+                    display: "flex", flexDirection: "column",
+                    alignItems: "center", gap: 5, flexShrink: 0,
+                  }}>
+                    <div style={{
+                      width: 38, height: 38, borderRadius: "50%",
+                      background: "var(--bg-raised)",
+                      border: "1px solid var(--border)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 13, fontWeight: 700, color: "var(--text-3)",
+                      overflow: "hidden", opacity: .6,
+                    }}>
+                      {u.avatar_url
+                        ? <img src={u.avatar_url} alt="" style={{ width:"100%",height:"100%",objectFit:"cover" }} />
+                        : init}
+                    </div>
+                    <div style={{ fontSize: 9, color: "var(--text-3)",
+                      maxWidth: 44, textAlign: "center",
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {u.display_name || u.username}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── Unread messages ── */}
+        {totalUnread > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <SectionTitle title={`${totalUnread} unread message${totalUnread !== 1 ? "s" : ""}`} accent />
+            {dms.filter(r => unread[r.id] > 0).map(room => {
+              const m = room.members?.find(m => Number(m.user_id) !== Number(user?.id));
+              const other = m ? userMap[Number(m.user_id)] : null;
+              const msgs  = messages[room.id] || [];
+              const last  = msgs[msgs.length - 1];
+              return (
+                <div key={room.id} onClick={() => onOpen(room)} style={{
+                  display: "flex", alignItems: "center", gap: 12,
+                  padding: "11px 12px", marginBottom: 6,
+                  background: "rgba(79,142,247,.06)",
+                  border: "1px solid var(--accent-dim)",
+                  borderRadius: "var(--radius)", cursor: "pointer",
+                  transition: "var(--trans)",
+                }}
+                  onMouseEnter={e => e.currentTarget.style.background = "rgba(79,142,247,.12)"}
+                  onMouseLeave={e => e.currentTarget.style.background = "rgba(79,142,247,.06)"}>
+                  <div style={{
+                    width: 40, height: 40, borderRadius: "50%", flexShrink: 0,
+                    background: "linear-gradient(135deg, var(--accent), var(--accent2))",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 14, fontWeight: 700, color: "#fff",
+                  }}>
+                    {(other?.display_name || other?.username || "?")[0].toUpperCase()}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-1)" }}>
+                      {other?.display_name || other?.username || "DM"}
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--text-2)",
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {last?.content?.slice(0, 50) || "New message"}
+                    </div>
+                  </div>
+                  <div style={{
+                    minWidth: 20, height: 20, borderRadius: 10,
+                    background: "var(--accent)", color: "#fff",
+                    fontSize: 10, fontWeight: 700,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    padding: "0 5px",
+                  }}>
+                    {unread[room.id]}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── Recent activity ── */}
         {activity.length > 0 && (
-          <div style={{ marginBottom: 16 }}>
-            <SectionTitle icon={<Activity size={12} />} title="Recent Activity" />
+          <div style={{ marginBottom: 20 }}>
+            <SectionTitle title="Recent activity" />
             {activity.map((a, i) => {
               const sender = userMap[Number(a.sender_id)];
               const room   = rooms.find(r => r.id === a.roomId);
@@ -264,12 +479,13 @@ function HomeTab({ user, online, others, dms, onOpen, setNavTab }) {
                   display: "flex", alignItems: "center", gap: 10,
                   padding: "9px 10px", marginBottom: 5,
                   background: "var(--bg-surface)", border: "1px solid var(--border)",
-                  borderRadius: "var(--radius-sm)", cursor: "pointer", transition: "var(--trans)",
+                  borderRadius: "var(--radius-sm)", cursor: "pointer",
+                  transition: "var(--trans)",
                 }}
                   onMouseEnter={e => e.currentTarget.style.background = "var(--bg-raised)"}
                   onMouseLeave={e => e.currentTarget.style.background = "var(--bg-surface)"}>
                   <div style={{
-                    width: 32, height: 32, borderRadius: "50%", flexShrink: 0,
+                    width: 30, height: 30, borderRadius: "50%", flexShrink: 0,
                     background: "linear-gradient(135deg, var(--accent), var(--accent2))",
                     display: "flex", alignItems: "center", justifyContent: "center",
                     fontSize: 11, fontWeight: 700, color: "#fff",
@@ -277,19 +493,17 @@ function HomeTab({ user, online, others, dms, onOpen, setNavTab }) {
                     {(sender?.display_name || sender?.username || "?")[0].toUpperCase()}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, color: "var(--text-1)", fontWeight: 500 }}>
-                      <span style={{ color: "var(--accent)" }}>
+                    <div style={{ fontSize: 12, color: "var(--text-1)" }}>
+                      <span style={{ color: "var(--accent)", fontWeight: 500 }}>
                         {sender?.display_name || sender?.username || "Someone"}
                       </span>
-                      <span style={{ color: "var(--text-3)", fontWeight: 400 }}>
-                        {" in "}{a.roomName}
-                      </span>
+                      <span style={{ color: "var(--text-3)" }}> in {a.roomName}</span>
                     </div>
                     <div style={{ fontSize: 11, color: "var(--text-2)",
                       overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {a.type === "voice" ? "Voice note" :
-                       a.type === "image" ? "Image" :
-                       a.content?.slice(0, 60) || "…"}
+                      {a.type === "voice" ? "Sent a voice note"
+                       : a.type === "image" ? "Sent an image"
+                       : a.content?.slice(0, 55) || "…"}
                     </div>
                   </div>
                   <div style={{ fontSize: 10, color: "var(--text-3)", flexShrink: 0 }}>
@@ -301,73 +515,25 @@ function HomeTab({ user, online, others, dms, onOpen, setNavTab }) {
           </div>
         )}
 
-        {/* Recent DMs */}
-        {dms.length > 0 && (
-          <div style={{ marginBottom: 16 }}>
-            <SectionTitle icon={<MessageSquare size={12} />} title="Recent Messages" />
-            {dms.slice(0, 4).map(r => {
-              const m     = r.members?.find(m => Number(m.user_id) !== Number(user?.id));
-              const other = m ? userMap[Number(m.user_id)] : null;
-              const isOn  = m ? onlineSet.has(Number(m.user_id)) : false;
-              const msgs  = messages[r.id] || [];
-              const last  = msgs[msgs.length - 1];
-              return (
-                <div key={r.id} onClick={() => onOpen(r)} style={{
-                  display: "flex", alignItems: "center", gap: 12,
-                  padding: "10px 12px", marginBottom: 6,
-                  background: "var(--bg-surface)", border: "1px solid var(--border)",
-                  borderRadius: "var(--radius)", cursor: "pointer", transition: "var(--trans)",
-                }}
-                  onMouseEnter={e => e.currentTarget.style.background = "var(--bg-raised)"}
-                  onMouseLeave={e => e.currentTarget.style.background = "var(--bg-surface)"}
-                  onTouchStart={e => e.currentTarget.style.background = "var(--bg-raised)"}
-                  onTouchEnd={e => e.currentTarget.style.background = "var(--bg-surface)"}>
-                  <div style={{
-                    width: 40, height: 40, borderRadius: "50%", flexShrink: 0,
-                    background: "linear-gradient(135deg, var(--accent), var(--accent2))",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 14, fontWeight: 700, color: "#fff",
-                    position: "relative", overflow: "hidden",
-                  }}>
-                    {other?.avatar_url
-                      ? <img src={other.avatar_url} alt="" style={{ width:"100%",height:"100%",objectFit:"cover" }} />
-                      : (other?.display_name || other?.username || "?")[0].toUpperCase()}
-                    <div style={{
-                      position: "absolute", bottom: 1, right: 1,
-                      width: 10, height: 10, borderRadius: "50%",
-                      background: isOn ? "var(--green)" : "var(--text-3)",
-                      border: "2px solid var(--bg-surface)",
-                    }} />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>
-                      {other?.display_name || other?.username || "DM"}
-                    </div>
-                    <div style={{ fontSize: 11, color: "var(--text-3)",
-                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {last
-                        ? (last.type === "voice" ? "Voice note" :
-                           last.type === "image" ? "Image" :
-                           last.content?.slice(0, 40))
-                        : "@" + (other?.username || "")}
-                    </div>
-                  </div>
-                  {last?.created_at && (
-                    <div style={{ fontSize: 10, color: "var(--text-3)", flexShrink: 0 }}>
-                      {timeAgo(last.created_at)}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {others.length === 0 && dms.length === 0 && activity.length === 0 && (
+        {/* ── Empty state ── */}
+        {others.length === 0 && activity.length === 0 && (
           <div style={{ textAlign: "center", padding: "40px 16px", color: "var(--text-3)" }}>
-            <div style={{ marginBottom: 10, opacity: .3 }}><MessageSquare size={36} /></div>
-            <div style={{ fontSize: 14, marginBottom: 6 }}>No one here yet</div>
-            <div style={{ fontSize: 12 }}>Share your IP and port on your WiFi</div>
+            <div style={{ marginBottom: 12, opacity: .3 }}>
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" strokeWidth="1.2">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+              </svg>
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6, color: "var(--text-2)" }}>
+              No one else yet
+            </div>
+            <div style={{ fontSize: 12, lineHeight: 1.7 }}>
+              Share <strong style={{ color: "var(--accent)" }}>https://YOUR_IP:5173</strong>
+              <br />with people on your WiFi to get started
+            </div>
           </div>
         )}
       </div>
@@ -375,7 +541,6 @@ function HomeTab({ user, online, others, dms, onOpen, setNavTab }) {
   );
 }
 
-// ── Messages Tab ──────────────────────────────────────────────────────────────
 
 function MessagesTab({ dms, user, onOpen }) {
   const { userMap, onlineSet, unread, messages } = useStore();

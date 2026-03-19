@@ -770,7 +770,7 @@ export default function DevPanel({ onClose }) {
           <div style={{ display:"flex", gap:6 }}>
             <button onClick={() => {
               const next = !ghost; setGhost(next);
-              Promise.resolve(getSocket()).then(socket => { if(socket)?.emit("presence:ghost", { ghost:next }));
+              const s = getSocket(); if(s) s.emit("presence:ghost", { ghost:next });
             }} style={{
               display:"flex", alignItems:"center", gap:4, padding:"5px 9px",
               background:ghost?"var(--bg-active)":"var(--bg-raised)",
