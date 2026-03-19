@@ -6,7 +6,7 @@ const path  = require("path");
 const CERT = path.join(__dirname, "cert.pem");
 const KEY  = path.join(__dirname, "key.pem");
 const PORT = 8443;
-const API  = "http://127.0.0.1:8000";
+const API  = "http://192.168.101.117:8000";
 
 const opts = {
   key:  fs.readFileSync(KEY),
@@ -15,11 +15,11 @@ const opts = {
 
 https.createServer(opts, (req, res) => {
   const options = {
-    hostname: "127.0.0.1",
+    hostname: "http://192.168.101.117",
     port: 8000,
     path: req.url,
     method: req.method,
-    headers: { ...req.headers, host: "127.0.0.1:8000" },
+    headers: { ...req.headers, host: "http://192.168.101.117:8000" },
   };
 
   const proxy = http.request(options, (r) => {

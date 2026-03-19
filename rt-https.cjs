@@ -9,7 +9,7 @@ const KEY  = path.join(__dirname, "key.pem");
 const PORT = 6443;
 
 const proxy = createProxyServer({
-  target: "http://127.0.0.1:6767",
+  target: "http://192.168.101.117:6767",
   ws: true,
   secure: false,
 });

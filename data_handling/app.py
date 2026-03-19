@@ -82,11 +82,22 @@ if __name__ == "__main__":
     print(f"\n  [API] http://{host_ip}:{config.PORT}")
     print(f"  [API] DATA → {config.DATA_PATH}\n")
 
+    import os
+    cert = os.path.expanduser('~/chatapp/cert.pem')
+    key  = os.path.expanduser('~/chatapp/key.pem')
+    ssl  = (cert, key) if os.path.exists(cert) and os.path.exists(key) else None
+    if ssl:
+        print(f"  [API] HTTPS on port {config.PORT}\n")
     try:
         from waitress import serve
-        print("  [API] Using waitress (production)\n")
-        serve(app, host=config.HOST, port=config.PORT, threads=8)
+        if ssl:
+            import ssl as _ssl
+            ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_SERVER)
+            ctx.load_cert_chain(cert, key)
+            serve(app, host=config.HOST, port=config.PORT, threads=8, url_scheme='https')
+        else:
+            serve(app, host=config.HOST, port=config.PORT, threads=8)
     except ImportError:
-        print("  [API] Using Flask dev server (install waitress for faster startup)\n")
         app.run(host=config.HOST, port=config.PORT, debug=True,
-                use_reloader=False, threaded=True)
+                use_reloader=False, threaded=True,
+                ssl_context=ssl)

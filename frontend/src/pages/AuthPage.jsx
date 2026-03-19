@@ -1,3 +1,4 @@
+import { Eye, EyeOff } from "react-feather";
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import useStore from "../lib/store";
@@ -6,6 +7,7 @@ import { auth, setToken } from "../lib/api";
 export default function AuthPage() {
   const [tab, setTab]   = useState("login");
   const [form, setForm] = useState({ username: "", display_name: "", password: "" });
+  const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy]   = useState(false);
   const { setAuth }       = useStore();
@@ -18,7 +20,7 @@ export default function AuthPage() {
     try {
       const res = tab === "login"
         ? await auth.login({ username: form.username, password: form.password })
-        : await auth.register({ username: form.username, display_name: form.display_name, password: form.password });
+        : await auth.signup({ username: form.username, display_name: form.display_name, password: form.password });
       setToken(res.token);
       setAuth(res.user, res.token);
     } catch (err) {
@@ -103,8 +105,17 @@ export default function AuthPage() {
             )}
           </AnimatePresence>
 
-          <Field label="Password" type="password" placeholder="••••••••"
-            value={form.password} onChange={set("password")} />
+          <div style={{ position:"relative" }}>
+            <Field label="Password" type={showPw ? "text" : "password"} placeholder="••••••••"
+              value={form.password} onChange={set("password")} />
+            <button type="button" onClick={() => setShowPw(v => !v)} style={{
+              position:"absolute", right:10, top:"50%", transform:"translateY(-50%)",
+              background:"none", border:"none", cursor:"pointer",
+              color:"var(--text-3)", padding:4, display:"flex", alignItems:"center",
+            }}>
+              {showPw ? <EyeOff size={15}/> : <Eye size={15}/>}
+            </button>
+          </div>
 
           {error && (
             <div style={{
