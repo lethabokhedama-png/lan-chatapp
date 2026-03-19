@@ -526,10 +526,7 @@ export default function DevPanel({ onClose }) {
 
       } else if (cmd === "broadcast") {
         if (!rest) { printErr("Usage: !broadcast <message>"); return; }
-        socketEmit.broadcast(
-          roomId:r.id, content:`[system] ${rest}`, type:"system",
-          clientId:`sys_${Date.now()}_${r.id}`,
-        }));
+        socketEmit.broadcast(rest);
         printOk(`Broadcast to ${rooms.length} rooms: "${rest}"`);
 
       } else if (cmd === "msg") {
@@ -544,10 +541,7 @@ export default function DevPanel({ onClose }) {
 
       } else if (cmd === "announce") {
         if (!rest) { printErr("Usage: !announce <message>"); return; }
-        socketEmit.broadcast(
-          roomId:r.id, content:`[system] ${rest}`, type:"system",
-          clientId:`sys_${Date.now()}_${r.id}`,
-        }));
+        socketEmit.broadcast(rest);
         if (Notification.permission === "granted")
           new Notification("LAN Chat Announcement", { body: rest });
         printOk(`Announced: "${rest}"`);
@@ -559,10 +553,7 @@ export default function DevPanel({ onClose }) {
         setFlags(f => ({ ...f, maintenance_mode: val }));
         await apiFetch("/api/dev/flags", { method:"PATCH",
           body: JSON.stringify({ maintenance_mode: val }) });
-        if (val) socketEmit.broadcast(
-          roomId:r.id, content:"[system] Server entering maintenance mode.",
-          type:"system", clientId:`sys_maint_${r.id}`,
-        }));
+        if (val) socketEmit.broadcast(rest);
         printOk(`Maintenance mode ${mode.toUpperCase()}`);
 
       } else if (cmd === "purge") {
@@ -617,10 +608,7 @@ export default function DevPanel({ onClose }) {
         printOk("All flags reset to defaults");
 
       } else if (cmd === "reload") {
-        socketEmit.broadcast(
-          roomId:r.id, content:"[system] Admin requested reload. Please refresh.",
-          type:"system", clientId:`sys_reload_${r.id}`,
-        }));
+        socketEmit.broadcast(rest);
         printOk("Reload message sent to all rooms");
 
       } else if (cmd === "simulate") {
@@ -725,9 +713,9 @@ export default function DevPanel({ onClose }) {
     if (!sysMsg.trim()) return;
     const content = `[system] ${sysMsg.trim()}`;
     if (sysRoom === "all") {
-      socketEmit.broadcast( roomId:r.id, content, type:"system", clientId:`sys_${Date.now()}_${r.id}` }));
+        socketEmit.broadcast(content);
     } else {
-      emit.sendMsg({ roomId:sysRoom, content, type:"system", clientId:`sys_${Date.now()}` });
+        socketEmit.broadcast(content);
     }
     setSysMsg("");
   }
