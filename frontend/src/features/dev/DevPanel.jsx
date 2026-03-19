@@ -6,6 +6,7 @@ import {
 } from "react-feather";
 import useStore from "../../lib/store";
 import { getToken } from "../../lib/api";
+import { getSocket } from "../../lib/socket";
 import { emit } from "../../lib/socket";
 
 const BASE = () => import.meta.env.VITE_API_URL || "";
@@ -458,8 +459,7 @@ export default function DevPanel({ onClose }) {
         const u = await getUser(args[0]);
         if (!u) { printErr(`User ${args[0]||"?"} not found`); return; }
         if (!confirm(`Kick @${u.username}?`)) { print("Cancelled"); return; }
-        const m = await import("../../lib/socket");
-        m.getSocket()?.emit("dev:kick", { uid: u.id });
+        getSocket()?.emit("dev:kick", { uid: u.id });
         printOk(`@${u.username} kicked offline (can reconnect)`);
 
       } else if (cmd === "ban") {
@@ -513,8 +513,7 @@ export default function DevPanel({ onClose }) {
         if (mode !== "on" && mode !== "off") { printErr("Usage: !ghost on | !ghost off"); return; }
         const next = mode === "on";
         setGhost(next);
-        const m = await import("../../lib/socket");
-        m.getSocket()?.emit("presence:ghost", { ghost: next });
+        getSocket()?.emit("presence:ghost", { ghost: next });
         printOk(next ? "Ghost ON — you appear offline to everyone" : "Ghost OFF — you are visible");
 
       } else if (cmd === "flag") {
@@ -713,8 +712,7 @@ export default function DevPanel({ onClose }) {
 
   async function kickUser(uid, uname) {
     if (!confirm(`Kick @${uname}?`)) return;
-    const m = await import("../../lib/socket");
-    m.getSocket()?.emit("dev:kick", { uid });
+    getSocket()?.emit("dev:kick", { uid });
   }
 
   async function deleteUser(uid, uname) {
@@ -772,8 +770,7 @@ export default function DevPanel({ onClose }) {
           <div style={{ display:"flex", gap:6 }}>
             <button onClick={() => {
               const next = !ghost; setGhost(next);
-              import("../../lib/socket").then(m =>
-                m.getSocket()?.emit("presence:ghost", { ghost:next }));
+              Promise.resolve(getSocket()).then(socket => { if(socket)?.emit("presence:ghost", { ghost:next }));
             }} style={{
               display:"flex", alignItems:"center", gap:4, padding:"5px 9px",
               background:ghost?"var(--bg-active)":"var(--bg-raised)",
