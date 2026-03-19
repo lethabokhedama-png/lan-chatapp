@@ -134,9 +134,8 @@ export default function DevPanel({ onClose }) {
     loadStats(); loadFlags();
     const t = setInterval(() =>
       setUptime(Math.floor((Date.now() - startRef.current) / 1000)), 1000);
-    import("../../lib/socket").then(m => {
-      const socket = m.getSocket();
-      if (!socket) return;
+    const socket = getSocket();
+    if (socket) {
       socket.on("msg:new", msg => {
         setMonitor(prev => [{
           ts:       new Date().toLocaleTimeString(),
@@ -146,7 +145,7 @@ export default function DevPanel({ onClose }) {
           type:     msg.type,
         }, ...prev].slice(0, 200));
       });
-    });
+    }
     return () => clearInterval(t);
   }, []);
 
@@ -404,7 +403,7 @@ export default function DevPanel({ onClose }) {
         print(`API ping: ${Date.now() - t0}ms`);
 
       } else if (cmd === "socket") {
-        const m = await import("../../lib/socket");
+        const m = { getSocket, emit: socketEmit };
         const s = m.getSocket();
         if (!s) { printErr("Socket not initialised"); return; }
         print(
