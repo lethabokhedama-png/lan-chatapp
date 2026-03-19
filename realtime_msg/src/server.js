@@ -1,59 +1,65 @@
-process.env.DEBUG = "socket.io:*";
-const express    = require("express");
-const http       = require("http");
+"use strict";
+const fs      = require("fs");
+const path    = require("path");
+const os      = require("os");
+const express = require("express");
+const https   = require("https");
+const http    = require("http");
 const { Server } = require("socket.io");
-const cors       = require("cors");
-const fs         = require("fs");
-const path       = require("path");
-const cfg        = require("./config");
-const handlers   = require("./sockets/handlers");
-const presence   = require("./sockets/presence");
 
-function loadSecret() {
-  const keyPath = path.join(cfg.DATA_PATH, "secret.key");
-  let waited = 0;
-  while (!fs.existsSync(keyPath)) {
-    if (waited === 0) console.log("  [Secret] Waiting for DATA/secret.key — start data_handling first...");
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1000);
-    waited += 1000;
-    if (waited >= 30000) {
-      console.error("  [Secret] Gave up waiting. Start data_handling first!");
-      process.exit(1);
-    }
-  }
-  const key = fs.readFileSync(keyPath, "utf8").trim();
-  console.log("  [Secret] Loaded from DATA/secret.key");
-  return key;
+const config  = require("./config");
+const auth    = require("./middleware/auth");
+const handlers = require("./sockets/handlers");
+const presence = require("./sockets/presence");
+
+const app = express();
+app.use(require("cors")({ origin: "*" }));
+app.get("/health", (_, res) => res.json({ status: "ok" }));
+
+// Load cert
+const CERT = path.join(os.homedir(), "chatapp/cert.pem");
+const KEY  = path.join(os.homedir(), "chatapp/key.pem");
+
+let server;
+if (fs.existsSync(CERT) && fs.existsSync(KEY)) {
+  server = https.createServer({
+    cert: fs.readFileSync(CERT),
+    key:  fs.readFileSync(KEY),
+  }, app);
+  console.log("  [RT] HTTPS mode");
+} else {
+  server = http.createServer(app);
+  console.log("  [RT] HTTP mode (no cert found)");
 }
 
-cfg.SECRET = loadSecret();
-
-const app    = express();
-const server = http.createServer(app);
-const io     = new Server(server, {
-  cors: { origin: cfg.CORS_ORIGIN, methods: ["GET", "POST"] },
-  pingTimeout:  60000,
-  pingInterval: 25000,
+const io = new Server(server, {
+  cors: { origin: "*", methods: ["GET","POST"] },
+  transports: ["websocket","polling"],
 });
 
-app.use(cors({ origin: cfg.CORS_ORIGIN }));
-app.use(express.json());
+// Auth middleware
+io.use(auth);
 
-app.get("/", (_, res) => res.json({ service: "LAN Chat Realtime", status: "running" }));
-app.get("/health", (_, res) => res.json({
-  status: "ok",
-  online: presence.onlineList().length,
-}));
+// Register handlers
+io.on("connection", socket => {
+  presence.onConnect(io, socket);
+  handlers.register(io, socket);
+  socket.on("disconnect", () => presence.onDisconnect(io, socket));
+});
 
-handlers.init(io);
-
-server.listen(cfg.PORT, cfg.HOST, () => {
-  const os   = require("os");
+// Get LAN IP
+function getLanIp() {
   const nets = os.networkInterfaces();
-  let ip = "127.0.0.1";
-  for (const iface of Object.values(nets).flat()) {
-    if (iface.family === "IPv4" && !iface.internal) { ip = iface.address; break; }
-  }
-  console.log(`\n  [realtime_msg] http://${ip}:${cfg.PORT}`);
-  console.log(`  [realtime_msg] ws://${ip}:${cfg.PORT}\n`);
+  for (const ifaces of Object.values(nets))
+    for (const iface of ifaces)
+      if (iface.family === "IPv4" && !iface.internal) return iface.address;
+  return "0.0.0.0";
+}
+
+const IP = getLanIp();
+const PORT = config.PORT || 6767;
+
+server.listen(PORT, "0.0.0.0", () => {
+  const proto = fs.existsSync(CERT) ? "https" : "http";
+  console.log(`  [RT] ${proto}://${IP}:${PORT}`);
 });

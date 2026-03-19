@@ -88,16 +88,15 @@ if __name__ == "__main__":
     ssl  = (cert, key) if os.path.exists(cert) and os.path.exists(key) else None
     if ssl:
         print(f"  [API] HTTPS on port {config.PORT}\n")
-    try:
-        from waitress import serve
-        if ssl:
-            import ssl as _ssl
-            ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_SERVER)
-            ctx.load_cert_chain(cert, key)
-            serve(app, host=config.HOST, port=config.PORT, threads=8, url_scheme='https')
-        else:
-            serve(app, host=config.HOST, port=config.PORT, threads=8)
-    except ImportError:
-        app.run(host=config.HOST, port=config.PORT, debug=True,
-                use_reloader=False, threaded=True,
-                ssl_context=ssl)
+    # Flask with SSL — waitress doesn't support SSL so we use Flask dev server with ssl_context
+    # For production use gunicorn: gunicorn --certfile cert.pem --keyfile key.pem app:app
+    if ssl:
+        print(f"  [API] HTTPS enabled")
+    app.run(
+        host=config.HOST,
+        port=config.PORT,
+        debug=False,
+        use_reloader=False,
+        threaded=True,
+        ssl_context=ssl,
+    )
