@@ -148,24 +148,7 @@ export default function SettingsPage({ onBack, devUnlocked, onOpenDev }) {
   const initials = (user?.display_name || user?.username || "?")[0].toUpperCase();
   const acColors = AVATAR_COLORS[avatarColor];
 
-  function PageHeader({ title, goBack }) {
-    return (
-      <div style={{
-        display: "flex", alignItems: "center", gap: 12,
-        padding: "14px 16px", borderBottom: "1px solid var(--border)",
-        background: "var(--bg-surface)",
-        position: "sticky", top: 0, zIndex: 10, flexShrink: 0,
-      }}>
-        <button className="icon-btn" onClick={goBack}>
-          <ArrowLeft size={18} />
-        </button>
-        <div style={{ fontFamily: "var(--font-display)", fontSize: 16,
-          fontWeight: 700, color: "var(--text-1)" }}>
-          {title}
-        </div>
-      </div>
-    );
-  }
+
 
   // ── Section detail view ──────────────────────────────────────────────────────
   if (section) {
@@ -590,6 +573,25 @@ export default function SettingsPage({ onBack, devUnlocked, onOpenDev }) {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+function PageHeader({ title, goBack }) {
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 12,
+      padding: "14px 16px", borderBottom: "1px solid var(--border)",
+      background: "var(--bg-surface)",
+      position: "sticky", top: 0, zIndex: 10, flexShrink: 0,
+    }}>
+      <button className="icon-btn" onClick={goBack}>
+        <ArrowLeft size={18} />
+      </button>
+      <div style={{ fontFamily: "var(--font-display)", fontSize: 16,
+        fontWeight: 700, color: "var(--text-1)" }}>
+        {title}
+      </div>
     </div>
   );
 }
