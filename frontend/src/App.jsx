@@ -59,16 +59,16 @@ export default function App() {
     usersApi.list().then(list => setUserMap(list)).catch(() => {});
     const socket = connect();
 
-    socket.on("presence:list",   ({ online }) => setOnlineList(online.map(Number)));
+    socket.on("presence:list",   ({ online }) => setOnlineList((online || []).map(Number)));
     socket.on("presence:update", ({ uid, status }) => {
       const n = Number(uid);
       if (status === "online") {
-        setOnline(n);
+        setOnline(Number(n));
         const u = useStore.getState().userMap[n];
         if (u && n !== Number(user.id))
           showToast(`${u.display_name || u.username} is online`, "info");
       } else {
-        setOffline(n);
+        setOffline(Number(n));
       }
     });
 

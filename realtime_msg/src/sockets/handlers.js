@@ -1,5 +1,8 @@
 const presence        = require("./presence");
-const { verifyToken } = require("../middleware/auth");
+const authMiddleware = require("../middleware/auth");
+const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
 const { dhPost, dhPatch, dhDelete, dhGet } = require("../utils/dataApi");
 
 const log = (tag, ...args) =>
@@ -25,7 +28,7 @@ function init(io) {
 
   io.on("connection", async (socket) => {
     const token = socket.handshake.auth?.token;
-    const uid   = verifyToken(token);
+    const uid   = socket.uid; // set by middleware
 
     if (!uid) {
       log("AUTH", `REJECTED sid=${socket.id} — invalid token`);
