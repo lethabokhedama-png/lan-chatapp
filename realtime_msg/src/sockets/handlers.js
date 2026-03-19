@@ -1,8 +1,5 @@
-const presence        = require("./presence");
-const authMiddleware = require("../middleware/auth");
-const crypto = require("crypto");
-const fs = require("fs");
-const path = require("path");
+"use strict";
+const presence = require("./presence");
 const { dhPost, dhPatch, dhDelete, dhGet } = require("../utils/dataApi");
 
 const log = (tag, ...args) =>
@@ -15,65 +12,80 @@ async function getUsername(uid, token) {
   } catch { return `uid:${uid}`; }
 }
 
-function logOnlineList() {
-  const list = presence.onlineList();
-  const names = list.map(e => e.username || `uid:${e.uid}`);
-  log("ONLINE", `[${names.join(", ") || "nobody"}]`);
-}
-
 let _io;
 
 function init(io) {
   _io = io;
 
   io.on("connection", async (socket) => {
-    const token = socket.handshake.auth?.token;
-    const uid   = socket.uid; // set by middleware
+    const token    = socket.handshake.auth?.token;
+    const uid      = socket.uid;
+    const username = socket.username || `uid:${uid}`;
 
     if (!uid) {
-      log("AUTH", `REJECTED sid=${socket.id} — invalid token`);
-      socket.emit("error", { message: "Invalid token" });
       socket.disconnect(true);
       return;
     }
 
-    const username = await getUsername(uid, token);
+    // Track presence
     presence.connect(socket.id, uid, username, token);
+    log("CONNECT", `@${username} uid=${uid}`);
 
-    log("CONNECT", `@${username} (uid=${uid}) sid=${socket.id} ip=${socket.handshake.address}`);
-    logOnlineList();
-
+    // Tell everyone this user is online
     io.emit("presence:update", { uid, status: "online" });
-    socket.emit("presence:list", { online: presence.onlineList().map(e => e.uid) });
 
+    // Tell this socket who is online
+    socket.emit("presence:list", {
+      online: presence.onlineList().map(e => e.uid),
+    });
+
+    // ── Room events ──────────────────────────────────────────────────────
     socket.on("room:join", ({ roomId }) => {
       socket.join(roomId);
-      log("ROOM_JOIN", `@${username} joined ${roomId}`);
     });
 
     socket.on("room:leave", ({ roomId }) => {
       socket.leave(roomId);
-      log("ROOM_LEAVE", `@${username} left ${roomId}`);
     });
 
+    // ── Messages ─────────────────────────────────────────────────────────
     socket.on("msg:send", async (data) => {
-      log("MSG", `@${username} -> room:${data.roomId} "${data.content?.slice(0, 50)}"`);
+      const { roomId, content, type, fileId, replyToId, clientId } = data;
+      log("MSG", `@${username} -> ${roomId} "${String(content).slice(0,40)}"`);
+
+      // System messages — no DB save, broadcast directly
+      if (type === "system" || String(content).startsWith("[system]")) {
+        const sysMsg = {
+          id:         `sys_${Date.now()}`,
+          room_id:    roomId,
+          sender_id:  uid,
+          content,
+          type:       "system",
+          created_at: new Date().toISOString(),
+          client_id:  clientId,
+        };
+        io.to(roomId).emit("msg:new", sysMsg);
+        // Also emit as notification to all connected sockets
+        io.emit("sys:announce", { roomId, content, from: username });
+        return;
+      }
+
       try {
-        const msg = await dhPost(`/api/messages/${data.roomId}`, {
-          content: data.content, type: data.type || "text",
-          file_id: data.fileId || null, reply_to: data.replyTo || null,
-          client_id: data.clientId,
+        const msg = await dhPost(`/api/messages/${roomId}`, {
+          content, type: type || "text",
+          file_id: fileId || null,
+          reply_to: replyToId || null,
+          client_id: clientId,
         }, token);
-        log("MSG_SAVED", `id=${msg.id} broadcasting to room ${data.roomId}`);
-        io.to(data.roomId).emit("msg:new", msg);
+        log("MSG_SAVED", `id=${msg.id}`);
+        io.to(roomId).emit("msg:new", msg);
       } catch (err) {
-        log("ERR", `msg:send failed: ${err.response?.data?.error || err.message}`);
-        socket.emit("error", { message: err.response?.data?.error || "send failed" });
+        log("ERR", `msg:send: ${err.message}`);
+        socket.emit("error", { message: "Failed to send message" });
       }
     });
 
     socket.on("msg:edit", async ({ roomId, msgId, content }) => {
-      log("EDIT", `@${username} msg=${msgId}`);
       try {
         const updated = await dhPatch(`/api/messages/${roomId}/${msgId}`, { content }, token);
         io.to(roomId).emit("msg:edited", updated);
@@ -81,42 +93,102 @@ function init(io) {
     });
 
     socket.on("msg:delete", async ({ roomId, msgId }) => {
-      log("DELETE", `@${username} msg=${msgId}`);
       try {
         await dhDelete(`/api/messages/${roomId}/${msgId}`, token);
         io.to(roomId).emit("msg:deleted", { roomId, msgId });
       } catch (err) { log("ERR", err.message); }
     });
 
+    socket.on("msg:react", async ({ roomId, msgId, emoji }) => {
+      try {
+        const updated = await dhPost(
+          `/api/messages/${roomId}/${msgId}/react`,
+          { emoji }, token
+        );
+        io.to(roomId).emit("msg:edited", updated);
+      } catch (_) {}
+    });
+
     socket.on("msg:delivered", async ({ roomId, msgId }) => {
       try {
-        const updated = await dhPost(`/api/messages/${roomId}/${msgId}/delivered`, {}, token);
+        const updated = await dhPost(
+          `/api/messages/${roomId}/${msgId}/delivered`, {}, token
+        );
         io.to(roomId).emit("msg:receipt", { roomId, msgId, type: "delivered", uid, msg: updated });
       } catch (_) {}
     });
 
     socket.on("msg:seen", async ({ roomId, msgId }) => {
       try {
-        const updated = await dhPost(`/api/messages/${roomId}/${msgId}/seen`, {}, token);
+        const updated = await dhPost(
+          `/api/messages/${roomId}/${msgId}/seen`, {}, token
+        );
         io.to(roomId).emit("msg:receipt", { roomId, msgId, type: "seen", uid, msg: updated });
       } catch (_) {}
     });
 
+    // ── Typing ───────────────────────────────────────────────────────────
     socket.on("typing:start", ({ roomId }) => {
       presence.startTyping(roomId, uid);
-      socket.to(roomId).emit("typing:update", { roomId, typing: presence.typingIn(roomId) });
+      socket.to(roomId).emit("typing:update", {
+        roomId, typing: presence.typingIn(roomId),
+      });
     });
 
     socket.on("typing:stop", ({ roomId }) => {
       presence.stopTyping(roomId, uid);
-      socket.to(roomId).emit("typing:update", { roomId, typing: presence.typingIn(roomId) });
+      socket.to(roomId).emit("typing:update", {
+        roomId, typing: presence.typingIn(roomId),
+      });
     });
 
+    // ── Ghost mode ───────────────────────────────────────────────────────
+    socket.on("presence:ghost", ({ ghost }) => {
+      presence.setGhost(socket.id, ghost);
+      if (ghost) {
+        io.emit("presence:update", { uid, status: "offline" });
+      } else {
+        io.emit("presence:update", { uid, status: "online" });
+      }
+      log("GHOST", `@${username} ghost=${ghost}`);
+    });
+
+    // ── Dev: kick ────────────────────────────────────────────────────────
+    socket.on("dev:kick", ({ uid: targetUid }) => {
+      // Only allow dev accounts — check by uid (lethabok is uid 6)
+      const devUids = presence.getDevUids?.() || [6];
+      if (!devUids.includes(Number(uid)) && uid !== 6) return;
+
+      // Find all sockets for target uid and disconnect them
+      const sockets = io.sockets.sockets;
+      sockets.forEach((s) => {
+        if (Number(s.uid) === Number(targetUid)) {
+          s.emit("kicked", { message: "You have been disconnected by an admin." });
+          s.disconnect(true);
+          log("KICK", `@${username} kicked uid=${targetUid}`);
+        }
+      });
+    });
+
+    // ── Dev: broadcast system message ────────────────────────────────────
+    socket.on("dev:broadcast", ({ content }) => {
+      const sysMsg = {
+        id:         `sys_${Date.now()}`,
+        sender_id:  uid,
+        content:    `[system] ${content}`,
+        type:       "system",
+        created_at: new Date().toISOString(),
+      };
+      // Send to all rooms this user knows about
+      io.emit("sys:announce", { content, from: username });
+      log("BROADCAST", `@${username}: ${content}`);
+    });
+
+    // ── Disconnect ───────────────────────────────────────────────────────
     socket.on("disconnect", (reason) => {
       const gone = presence.disconnect(socket.id);
       if (gone !== null) {
-        log("DISCONNECT", `@${username} (uid=${uid}) reason=${reason}`);
-        logOnlineList();
+        log("DISCONNECT", `@${username} uid=${uid} reason=${reason}`);
         io.emit("presence:update", { uid, status: "offline" });
       }
     });
@@ -124,6 +196,3 @@ function init(io) {
 }
 
 module.exports = { init };
-
-// Re-emit presence on reconnect
-// (added to fix users showing offline when online)

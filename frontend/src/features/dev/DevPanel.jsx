@@ -526,7 +526,7 @@ export default function DevPanel({ onClose }) {
 
       } else if (cmd === "broadcast") {
         if (!rest) { printErr("Usage: !broadcast <message>"); return; }
-        rooms.forEach(r => emit.sendMsg({
+        socketEmit.broadcast(
           roomId:r.id, content:`[system] ${rest}`, type:"system",
           clientId:`sys_${Date.now()}_${r.id}`,
         }));
@@ -544,7 +544,7 @@ export default function DevPanel({ onClose }) {
 
       } else if (cmd === "announce") {
         if (!rest) { printErr("Usage: !announce <message>"); return; }
-        rooms.forEach(r => emit.sendMsg({
+        socketEmit.broadcast(
           roomId:r.id, content:`[system] ${rest}`, type:"system",
           clientId:`sys_${Date.now()}_${r.id}`,
         }));
@@ -559,7 +559,7 @@ export default function DevPanel({ onClose }) {
         setFlags(f => ({ ...f, maintenance_mode: val }));
         await apiFetch("/api/dev/flags", { method:"PATCH",
           body: JSON.stringify({ maintenance_mode: val }) });
-        if (val) rooms.forEach(r => emit.sendMsg({
+        if (val) socketEmit.broadcast(
           roomId:r.id, content:"[system] Server entering maintenance mode.",
           type:"system", clientId:`sys_maint_${r.id}`,
         }));
@@ -617,7 +617,7 @@ export default function DevPanel({ onClose }) {
         printOk("All flags reset to defaults");
 
       } else if (cmd === "reload") {
-        rooms.forEach(r => emit.sendMsg({
+        socketEmit.broadcast(
           roomId:r.id, content:"[system] Admin requested reload. Please refresh.",
           type:"system", clientId:`sys_reload_${r.id}`,
         }));
@@ -725,7 +725,7 @@ export default function DevPanel({ onClose }) {
     if (!sysMsg.trim()) return;
     const content = `[system] ${sysMsg.trim()}`;
     if (sysRoom === "all") {
-      rooms.forEach(r => emit.sendMsg({ roomId:r.id, content, type:"system", clientId:`sys_${Date.now()}_${r.id}` }));
+      socketEmit.broadcast( roomId:r.id, content, type:"system", clientId:`sys_${Date.now()}_${r.id}` }));
     } else {
       emit.sendMsg({ roomId:sysRoom, content, type:"system", clientId:`sys_${Date.now()}` });
     }
