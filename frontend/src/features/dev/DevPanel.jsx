@@ -722,16 +722,12 @@ export default function DevPanel({ onClose }) {
   return (
     <div style={{
       position:"fixed", inset:0,
-      background:"rgba(0,0,0,.85)", backdropFilter:"blur(6px)",
-      zIndex:300, display:"flex", alignItems:"flex-end", justifyContent:"center",
-    }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{
-        background:"var(--bg-surface)", border:"1px solid var(--border)",
-        borderRadius:"var(--radius-xl) var(--radius-xl) 0 0",
-        width:"100%", maxWidth:680, maxHeight:"94dvh",
-        display:"flex", flexDirection:"column",
-        boxShadow:"0 -24px 80px rgba(0,0,0,.7)",
-        animation:"slideUp 250ms cubic-bezier(.34,1.26,.64,1)",
+      background:"var(--bg-base)",
+      zIndex:300, display:"flex", flexDirection:"column",
+    }}>
+      <div style={{
+        flex:1, display:"flex", flexDirection:"column",
+        background:"var(--bg-base)", overflow:"hidden",
       }}>
 
         {/* Header */}
@@ -1186,12 +1182,7 @@ export default function DevPanel({ onClose }) {
         </div>
       </div>
 
-      <style>{`
-        @keyframes slideUp {
-          from { opacity:0; transform:translateY(40px); }
-          to   { opacity:1; transform:translateY(0); }
-        }
-      `}</style>
+
     </div>
   );
 }

@@ -615,32 +615,33 @@ export default function SettingsPage({ onBack, devUnlocked, onOpenDev }) {
 
       {/* Dev Panel button — lethabok only */}
       {devUnlocked && onOpenDev && (
-        <div style={{ padding: "0 16px 24px" }}>
+        <div style={{ padding:"16px 16px 60px" }}>
           <button
             onClick={onOpenDev}
             style={{
-              width: "100%", padding: "12px",
-              background: "rgba(79,142,247,.08)",
-              border: "1px solid var(--accent-dim)",
-              borderRadius: "var(--radius-sm)",
-              color: "var(--accent)",
-              fontFamily: "var(--font-body)",
-              fontSize: 13, fontWeight: 600,
-              cursor: "pointer",
-              display: "flex", alignItems: "center",
-              justifyContent: "center", gap: 8,
-              transition: "var(--trans)",
+              width:"100%", padding:"16px",
+              background:"linear-gradient(135deg,rgba(79,142,247,.12),rgba(124,106,247,.12))",
+              border:"2px solid var(--accent)",
+              borderRadius:"var(--radius-sm)", color:"var(--accent)",
+              fontFamily:"var(--font-body)", fontSize:15, fontWeight:700,
+              cursor:"pointer", display:"flex", alignItems:"center",
+              justifyContent:"center", gap:10,
+              boxShadow:"0 0 24px var(--accent-glow)",
+              letterSpacing:0.5,
             }}
-            onMouseEnter={e => e.currentTarget.style.background = "rgba(79,142,247,.15)"}
-            onMouseLeave={e => e.currentTarget.style.background = "rgba(79,142,247,.08)"}
+            onMouseEnter={e => e.currentTarget.style.background="linear-gradient(135deg,rgba(79,142,247,.28),rgba(124,106,247,.28))"}
+            onMouseLeave={e => e.currentTarget.style.background="linear-gradient(135deg,rgba(79,142,247,.12),rgba(124,106,247,.12))"}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
               <polyline points="16 18 22 12 16 6"/>
               <polyline points="8 6 2 12 8 18"/>
             </svg>
-            Dev Panel
+            Open Dev Panel
           </button>
+          <div style={{ fontSize:10, color:"var(--text-3)", textAlign:"center", marginTop:8, letterSpacing:1 }}>
+            LETHABOK ONLY
+          </div>
         </div>
       )}
 

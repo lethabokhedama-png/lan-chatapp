@@ -185,3 +185,27 @@ def _get_profile(uid):
 def _get_profile_by_dir(dir_name):
     from utils.user_fs import get_profile
     return get_profile(dir_name) if dir_name else None
+
+
+@bp.get("/logs")
+@require_auth
+def get_logs():
+    import json
+    from pathlib import Path
+    log_path = Path(config.DATA_PATH) / "dev" / "audit.json"
+    if not log_path.exists():
+        return jsonify([])
+    try:
+        logs = json.loads(log_path.read_text())
+        return jsonify(logs[-100:] if isinstance(logs, list) else [])
+    except Exception:
+        return jsonify([])
+
+
+@bp.delete("/logs")
+@require_auth  
+def clear_logs():
+    from pathlib import Path
+    log_path = Path(config.DATA_PATH) / "dev" / "audit.json"
+    log_path.write_text("[]")
+    return jsonify({"ok": True})
