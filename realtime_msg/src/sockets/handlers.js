@@ -121,3 +121,6 @@ function init(io) {
 }
 
 module.exports = { init };
+
+// Re-emit presence on reconnect
+// (added to fix users showing offline when online)

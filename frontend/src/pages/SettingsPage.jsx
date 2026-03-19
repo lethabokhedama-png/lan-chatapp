@@ -84,7 +84,6 @@ export default function SettingsPage({ onBack, devUnlocked, onOpenDev }) {
   const [avatarColor, setAvatarColor] = useState(0);
   const [pfp, setPfp]             = useState(user?.avatar_url || null);
   const [saved, setSaved]         = useState("");
-  const [devTaps, setDevTaps]     = useState(0);
 
   const [theme, setTheme] = useState(() => localStorage.getItem("lanchat_theme") || "dark");
   const pfpRef = useRef(null);
@@ -144,14 +143,6 @@ export default function SettingsPage({ onBack, devUnlocked, onOpenDev }) {
     clearAuth();
   }
 
-  function handleDevTap() {
-    const next = devTaps + 1;
-    setDevTaps(next);
-    if (next >= 5) {
-      localStorage.setItem("lanchat_dev_unlocked", "1");
-      setDevUnlocked(true);
-      setDevTaps(0);
-    }
   }
 
   const initials = (user?.display_name || user?.username || "?")[0].toUpperCase();
@@ -407,14 +398,12 @@ export default function SettingsPage({ onBack, devUnlocked, onOpenDev }) {
                 LAN Chat
               </div>
               <div
-                onClick={handleDevTap}
+                
                 style={{ color: "var(--text-3)", fontSize: 12, marginBottom: 4,
-                  cursor: "pointer", userSelect: "none" }}
+                  cursor: "default" }}
               >
                 v1.7.14 — Local Network Messenger
-                {devTaps > 0 && devTaps < 5 && (
                   <span style={{ color: "var(--accent)", marginLeft: 6 }}>
-                    ({5 - devTaps} more taps)
                   </span>
                 )}
                 {devUnlocked && (

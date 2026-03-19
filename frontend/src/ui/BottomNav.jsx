@@ -5,7 +5,7 @@ import Modal    from "./Modal";
 import { rooms as roomsApi, users as usersApi } from "../lib/api";
 import { emit }  from "../lib/socket";
 
-export default function BottomNav({ active, onNavigate }) {
+export default function BottomNav({ active, onNavigate, hidePlus }) {
   const { unread, onlineSet, user, rooms, setRooms, setActiveRoom } = useStore();
   const [showNewDm,    setShowNewDm]    = useState(false);
   const [showNewGroup, setShowNewGroup] = useState(false);
@@ -61,7 +61,7 @@ export default function BottomNav({ active, onNavigate }) {
   return (
     <>
       {/* Floating + button */}
-      {(active === "messages" || active === "groups") && (
+      {!hidePlus && (active === "messages" || active === "groups") && (
         <button
           onClick={active === "messages" ? openNewDm : openNewGroup}
           style={{
