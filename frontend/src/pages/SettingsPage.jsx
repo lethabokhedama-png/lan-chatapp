@@ -107,7 +107,7 @@ export default function SettingsPage({ onBack, devUnlocked, onOpenDev }) {
     const file = e.target.files[0];
     if (!file) return;
     const BASE = import.meta.env.VITE_API_URL || "";
-    const tk   = localStorage.getItem("lanchat_token");
+    const tk   = localStorage.getItem("lc_token");
     const form = new FormData();
     form.append("file", file);
     try {
