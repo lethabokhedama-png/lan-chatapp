@@ -54,6 +54,9 @@ export default function BottomNav({ active, onNavigate, hidePlus }) {
     }
     setActiveRoom(room);
     emit.joinRoom(room.id);
+    // Notify all members via socket that a new group exists
+    const { getSocket } = await import("../lib/socket");
+    getSocket()?.emit("rooms:refresh");
     setShowNewGroup(false);
     setChName(""); setChTopic(""); setChMembers([]);
   }

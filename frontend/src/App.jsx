@@ -13,7 +13,7 @@ export default function App() {
   const {
     user, setAuth, setUserMap, setOnline, setOffline, setOnlineList,
     appendMessage, updateMessage, removeMessage, setTyping,
-    addUnread, clearAuth,
+    addUnread, clearAuth, setRooms,
   } = useStore();
 
   const [booting,      setBooting]      = useState(true);
@@ -127,9 +127,25 @@ export default function App() {
     // ── Connection state ──────────────────────────────────────────────────
     socket.on("connect", () => {
       console.log("[Socket] Connected:", socket.id);
-      // Re-join all rooms on reconnect
+      // Re-join all rooms and refresh room list
       const state = useStore.getState();
       state.rooms?.forEach(r => emit.joinRoom(r.id));
+      // Ask server for full room list (catches new groups added while offline)
+      socket.emit("rooms:refresh");
+    });
+
+    socket.on("rooms:list", (rooms) => {
+      if (!Array.isArray(rooms)) return;
+      const state = useStore.getState();
+      // Merge new rooms into store
+      const existing = state.rooms || [];
+      const merged = [...existing];
+      rooms.forEach(r => {
+        if (!merged.find(x => x.id === r.id)) merged.push(r);
+      });
+      state.setRooms(merged);
+      // Join all rooms on socket
+      rooms.forEach(r => emit.joinRoom(r.id));
     });
 
     socket.on("disconnect", (reason) => {

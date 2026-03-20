@@ -61,5 +61,5 @@ function getDevUids() {
 module.exports = {
   connect, disconnect, setGhost,
   onlineList, startTyping, stopTyping,
-  typingIn, getDevUids,
+  typingIn, getDevUids, typingMap,
 };

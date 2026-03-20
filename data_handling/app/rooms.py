@@ -2,6 +2,20 @@
 /api/rooms  — channels, DMs, membership, pins, wallpaper
 """
 from pathlib import Path
+import requests as _req
+
+def _notify_rt(event, data):
+    """Tell realtime server about a new room so it can push to clients."""
+    try:
+        import config as _cfg
+        _req.post(
+            f"https://127.0.0.1:{_cfg.RT_NOTIFY_PORT or 6767}/internal/notify",
+            json={"event": event, "data": data},
+            verify=False, timeout=1,
+        )
+    except Exception:
+        pass
+
 from flask import Blueprint, request, jsonify
 from utils.ids      import next_room_id, register_room, dm_room_id, user_dir_name
 from utils.store    import read, write, update, ensure_dir

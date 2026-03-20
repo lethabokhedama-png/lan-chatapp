@@ -84,12 +84,26 @@ export default function ChatWindow({ room }) {
     }
   }
 
+  const typingTimer = useRef(null);
+
   function onInputChange(e) {
     const val = e.target.value;
     setInput(val);
-    emit.typingStart(room.id);
     const match = val.match(/@(\w*)$/);
     setMentionQ(match && isGroup ? match[1] : "");
+
+    if (!val.trim()) {
+      // Empty — stop typing immediately
+      clearTimeout(typingTimer.current);
+      emit.typingStop(room.id);
+      return;
+    }
+    // Start typing and auto-stop after 3s of no input
+    emit.typingStart(room.id);
+    clearTimeout(typingTimer.current);
+    typingTimer.current = setTimeout(() => {
+      emit.typingStop(room.id);
+    }, 3000);
   }
 
   function insertMention(u) {
@@ -112,6 +126,7 @@ export default function ChatWindow({ room }) {
     setInput("");
     setReplyTo(null);
     setMentionQ("");
+    clearTimeout(typingTimer?.current);
     emit.typingStop(room.id);
 
     const clientId = `c_${Date.now()}_${Math.random().toString(36).slice(2)}`;

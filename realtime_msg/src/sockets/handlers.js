@@ -186,6 +186,18 @@ function init(io) {
 
     // ── Disconnect ───────────────────────────────────────────────────────
     socket.on("disconnect", (reason) => {
+      // Clear all typing indicators for this user
+      const { typingMap } = presence;
+      if (typingMap) {
+        typingMap.forEach((set, roomId) => {
+          if (set.has(uid)) {
+            set.delete(uid);
+            io.to(roomId).emit("typing:update", {
+              roomId, typing: Array.from(set),
+            });
+          }
+        });
+      }
       const gone = presence.disconnect(socket.id);
       if (gone !== null) {
         log("DISCONNECT", `@${username} uid=${uid} reason=${reason}`);
