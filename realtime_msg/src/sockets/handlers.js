@@ -142,6 +142,18 @@ function init(io) {
       });
     });
 
+    // ── Room refresh ────────────────────────────────────────────────────────
+    socket.on("rooms:refresh", async () => {
+      try {
+        const rooms = await dhGet("/api/rooms/mine", token);
+        socket.emit("rooms:list", rooms);
+        (rooms || []).forEach(r => socket.join(r.id));
+        log("ROOMS", `@${username} joined ${(rooms||[]).length} rooms`);
+      } catch (err) {
+        log("ERR", `rooms:refresh: ${err.message}`);
+      }
+    });
+
     // ── Ghost mode ───────────────────────────────────────────────────────
     socket.on("presence:ghost", ({ ghost }) => {
       presence.setGhost(socket.id, ghost);

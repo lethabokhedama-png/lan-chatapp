@@ -1,3 +1,4 @@
+import { getFlag } from "../../lib/flags";
 import React, { useState, useRef, useEffect } from "react";
 import { Mic, Square, Send, X, Play, Pause } from "react-feather";
 import { getToken } from "../../lib/api";
@@ -48,6 +49,7 @@ export default function VoiceRecorder({ roomId, onClose }) {
   }
 
   async function startRecording() {
+    if (!getFlag("voice_notes", true)) { setError("Voice notes are disabled by admin."); return; }
     setError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });

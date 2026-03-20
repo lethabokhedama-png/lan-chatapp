@@ -209,3 +209,87 @@ def clear_logs():
     log_path = Path(config.DATA_PATH) / "dev" / "audit.json"
     log_path.write_text("[]")
     return jsonify({"ok": True})
+
+
+@bp.delete("/rooms/<room_id>")
+@require_auth
+def close_room(room_id):
+    from utils.store import read, write
+    from pathlib import Path
+    import config, shutil
+    me = _get_profile(request.uid)
+    if me.get("role") != "dev":
+        return jsonify({"error": "forbidden"}), 403
+    room_path = Path(config.DATA_PATH) / "rooms" / room_id
+    if room_path.exists():
+        shutil.rmtree(room_path)
+    # Remove from user memberships
+    idx = read(Path(config.DATA_PATH) / "index.json", {})
+    return jsonify({"ok": True, "deleted": room_id})
+
+
+@bp.delete("/rooms/<room_id>/messages")
+@require_auth
+def purge_room(room_id):
+    from utils.store import write
+    from pathlib import Path
+    import config
+    me = _get_profile(request.uid)
+    if me.get("role") != "dev":
+        return jsonify({"error": "forbidden"}), 403
+    msg_path = Path(config.DATA_PATH) / "rooms" / room_id / "messages.json"
+    write(msg_path, [])
+    return jsonify({"ok": True, "purged": room_id})
+
+
+@bp.patch("/rooms/<room_id>/meta")
+@require_auth
+def rename_room(room_id):
+    from utils.store import read, write
+    from pathlib import Path
+    import config
+    me = _get_profile(request.uid)
+    if me.get("role") != "dev":
+        return jsonify({"error": "forbidden"}), 403
+    name = request.json.get("name", "")
+    meta_path = Path(config.DATA_PATH) / "rooms" / room_id / "meta.json"
+    meta = read(meta_path, {})
+    meta["name"] = name
+    write(meta_path, meta)
+    return jsonify({"ok": True, "id": room_id, "name": name})
+
+
+@bp.post("/gc")
+@require_auth
+def garbage_collect():
+    from utils.store import read
+    from pathlib import Path
+    import config
+    me = _get_profile(request.uid)
+    if me.get("role") != "dev":
+        return jsonify({"error": "forbidden"}), 403
+    uploads_path = Path(config.DATA_PATH) / "uploads"
+    removed = 0
+    if uploads_path.exists():
+        for f in uploads_path.rglob("*"):
+            if f.is_file() and f.stat().st_size == 0:
+                f.unlink()
+                removed += 1
+    return jsonify({"ok": True, "removed": removed})
+
+
+@bp.post("/backup")
+@require_auth
+def backup_data():
+    from pathlib import Path
+    import config, shutil, time
+    me = _get_profile(request.uid)
+    if me.get("role") != "dev":
+        return jsonify({"error": "forbidden"}), 403
+    ts  = int(time.time())
+    dst = Path("/storage/emulated/0") / f"lanchat-backup-{ts}"
+    try:
+        shutil.copytree(config.DATA_PATH, str(dst))
+        return jsonify({"ok": True, "path": str(dst)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

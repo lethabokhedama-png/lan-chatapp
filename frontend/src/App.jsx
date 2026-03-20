@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import useStore from "./lib/store";
 import { getToken, auth, users as usersApi, clearToken } from "./lib/api";
 import { connect, emit } from "./lib/socket";
+import { loadFlags } from "./lib/flags";
 import AuthPage    from "./pages/AuthPage";
 import ChatPage    from "./pages/ChatPage";
 import Toast, { showNotification, showToast } from "./ui/Toast";
@@ -34,6 +35,7 @@ export default function App() {
         try { const u = await auth.me(); setAuth(u, t); }
         catch (_) { clearToken(); }
       }
+      await loadFlags();
       setBooting(false);
     })();
   }, [permsChecked, showPerms]);
@@ -47,6 +49,7 @@ export default function App() {
         try { const u = await auth.me(); setAuth(u, t); }
         catch (_) { clearToken(); }
       }
+      await loadFlags();
       setBooting(false);
     })();
   }

@@ -105,3 +105,17 @@ def logout():
 def _safe_profile(p: dict) -> dict:
     """Strip private fields before sending to client."""
     return {k: v for k, v in p.items() if not k.startswith("_")}
+
+def check_ban(uid):
+    """Returns ban info if user is banned, None otherwise."""
+    from utils.store import read
+    from pathlib import Path
+    import config, time
+    flags_path = Path(config.DATA_PATH) / "dev" / "flags.json"
+    flags = read(flags_path, {})
+    ban = flags.get("bans", {}).get(str(uid))
+    if not ban:
+        return None
+    if ban.get("until", 0) < time.time():
+        return None  # Ban expired
+    return ban
