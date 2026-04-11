@@ -107,13 +107,22 @@ def view_photo(file_path):
 def serve_file(file_path):
     p = UPLOAD_BASE / "files" / file_path
     if not p.exists(): return jsonify({"error": "Not found"}), 404
-    return send_file(str(p))
+    resp = send_file(str(p))
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    return resp
 
 @bp.get("/voice-serve/<path:file_path>")
 def serve_voice(file_path):
     p = UPLOAD_BASE / "voice" / file_path
     if not p.exists(): return jsonify({"error": "Not found"}), 404
-    return send_file(str(p), mimetype="audio/webm")
+    # Detect mime type from extension
+    ext = p.suffix.lower()
+    mime_map = {".webm":"audio/webm",".ogg":"audio/ogg",".mp4":"audio/mp4",".m4a":"audio/mp4",".wav":"audio/wav"}
+    mime = mime_map.get(ext, "audio/webm")
+    resp = send_file(str(p), mimetype=mime)
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    resp.headers["Accept-Ranges"] = "bytes"
+    return resp
 
 @bp.get("/photo-serve/<path:file_path>")
 @require_auth

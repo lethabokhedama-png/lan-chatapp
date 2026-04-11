@@ -38,10 +38,11 @@ def send_message(room_id):
         "room_id":      room_id,
         "sender_id":    request.uid,
         "content":      d.get("content", ""),
-        "type":         d.get("type", "text"),       # text|image|file|voice|system
+        "type":         d.get("type", "text"),
         "file_id":      d.get("file_id"),
+        "file_url":     d.get("file_url"),
         "reply_to":     d.get("reply_to"),
-        "client_id":    d.get("client_id"),          # optimistic UI correlation
+        "client_id":    d.get("client_id"),
         "created_at":   now(),
         "edited_at":    None,
         "_deleted":     False,

@@ -180,7 +180,9 @@ export default function ChatWindow({ room }) {
     ? Object.values(userMap).find(u =>
         Number(u.id) !== Number(user?.id) &&
         room.members?.some(m => Number(m.user_id) === Number(u.id))
-      )
+      ) || (room.members?.length
+        ? userMap[room.members.find(m => Number(m.user_id) !== Number(user?.id))?.user_id]
+        : null)
     : null;
   const dmOnline = dmOther ? onlineSet.has(Number(dmOther.id)) : false;
 
@@ -240,7 +242,7 @@ export default function ChatWindow({ room }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)",
             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {isGroup ? room.name : (dmOther?.display_name || dmOther?.username || "DM")}
+            {isGroup ? room.name : (dmOther?.display_name || ("@" + (dmOther?.username || "")) || "DM")}
           </div>
           <div style={{ fontSize: 11, color: dmOnline ? "var(--green)" : "var(--text-3)" }}>
             {isGroup

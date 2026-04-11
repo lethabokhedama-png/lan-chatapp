@@ -8,7 +8,8 @@ import ChatPage    from "./pages/ChatPage";
 import Toast, { showNotification, showToast } from "./ui/Toast";
 import Loader      from "./Loader";
 import Permissions from "./Permissions";
-import ErrorBoundary from "./ErrorBoundary";
+import ErrorBoundary  from "./ErrorBoundary";
+import Maintenance   from "./Maintenance";
 
 export default function App() {
   const {
@@ -18,6 +19,7 @@ export default function App() {
   } = useStore();
 
   const [booting,      setBooting]      = useState(true);
+  const [maintenance,  setMaintenance]  = useState(false);
   const [showPerms,    setShowPerms]    = useState(false);
   const [permsChecked, setPermsChecked] = useState(false);
 
@@ -130,12 +132,26 @@ export default function App() {
     // ── Connection state ──────────────────────────────────────────────────
     socket.on("connect", () => {
       console.log("[Socket] Connected:", socket.id);
-      // Re-join all rooms and refresh room list
       const state = useStore.getState();
       state.rooms?.forEach(r => emit.joinRoom(r.id));
-      // Ask server for full room list (catches new groups added while offline)
       socket.emit("rooms:refresh");
     });
+
+    // Poll for maintenance mode every 5s
+    const maintInterval = setInterval(async () => {
+      try {
+        const BASE = import.meta.env.VITE_API_URL || "";
+        const res  = await fetch(BASE + "/api/dev/flags");
+        const data = await res.json();
+        const on   = data?.global?.maintenance_mode ?? data?.maintenance_mode ?? false;
+        const isDev = useStore.getState().user?.username === "lethabok";
+        if (on && !isDev) {
+          setMaintenance(true);
+        } else if (!on) {
+          setMaintenance(false);
+        }
+      } catch (_) {}
+    }, 5000);
 
     socket.on("rooms:list", (rooms) => {
       if (!Array.isArray(rooms)) return;
@@ -163,6 +179,7 @@ export default function App() {
     });
 
     return () => {
+      clearInterval(maintInterval);
       [
         "presence:list","presence:update",
         "msg:new","msg:edited","msg:deleted","msg:receipt",
@@ -175,6 +192,7 @@ export default function App() {
   if (showPerms)                return <Permissions onDone={onPermsDone} />;
   if (!permsChecked || booting) return <Loader />;
   if (!user)                    return <AuthPage />;
+  if (maintenance)              return <Maintenance />;
 
   return (
     <ErrorBoundary>

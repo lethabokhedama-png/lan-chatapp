@@ -67,10 +67,22 @@ def login():
     if uid is None:
         return jsonify({"error": "Invalid credentials"}), 401
 
+    # Check maintenance — dev account can always login
+    if username != "lethabok" and check_maintenance():
+        return jsonify({"error": "maintenance"}), 503
+
     udir    = user_dir_name(uid)
     profile = get_profile(udir)
     if not profile or not verify_password(password, profile.get("_password_hash", "")):
         return jsonify({"error": "Invalid credentials"}), 401
+
+    # Check if user is banned
+    ban = check_ban(uid)
+    if ban:
+        import time
+        remaining = max(0, int((ban.get("until", 0) - time.time()) / 3600))
+        reason = ban.get("reason", "Banned by admin")
+        return jsonify({"error": f"Account banned: {reason}. {remaining}h remaining."}), 403
 
     token = make_token(uid)
     log_auth("login", uid, username, request.remote_addr)
@@ -119,3 +131,16 @@ def check_ban(uid):
     if ban.get("until", 0) < time.time():
         return None  # Ban expired
     return ban
+
+
+def check_maintenance():
+    """Returns True if maintenance mode is on."""
+    from utils.store import read
+    from pathlib import Path
+    flags_path = Path(config.DATA_PATH) / "dev" / "flags.json"
+    try:
+        import json
+        data = json.loads(flags_path.read_text())
+        return data.get("global", data).get("maintenance_mode", False)
+    except Exception:
+        return False

@@ -53,14 +53,29 @@ def ensure_dev_account():
 
 # ── Flags ────────────────────────────────────────────────
 DEFAULT_FLAGS = {
-    "smart_replies": True, "voice_notes": True,
-    "disappearing_photos": True, "read_receipts": True,
-    "typing_indicators": True, "online_presence": True,
-    "group_mentions": True, "dev_panel": True,
-    "one_time_view": True, "two_time_view": True,
-    "max_voice_seconds": 300, "max_upload_mb": 10,
-    "max_group_members": 50, "maintenance_mode": False,
-    "registration_open": True,
+    "smart_replies":        True,
+    "voice_notes":          True,
+    "disappearing_photos":  True,
+    "read_receipts":        True,
+    "typing_indicators":    True,
+    "online_presence":      True,
+    "group_mentions":       True,
+    "dev_panel":            True,
+    "one_time_view":        True,
+    "two_time_view":        True,
+    "registration_open":    True,
+    "allow_self_dm":        False,
+    "allow_file_uploads":   True,
+    "allow_image_uploads":  True,
+    "allow_group_creation": True,
+    "require_approval":     False,
+    "maintenance_mode":     False,
+    "max_voice_seconds":    300,
+    "max_upload_mb":        10,
+    "max_group_members":    50,
+    "max_message_length":   2000,
+    "max_rooms_per_user":   20,
+    "motd":                 "",
 }
 
 def ensure_flags():
@@ -293,3 +308,141 @@ def backup_data():
         return jsonify({"ok": True, "path": str(dst)})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ── Additional dev endpoints ─────────────────────────────────────────────────
+
+@bp.get("/rooms/<room_id>/messages")
+@require_auth
+def get_room_messages(room_id):
+    from utils.store import read
+    from pathlib import Path
+    import config
+    msgs = read(Path(config.DATA_PATH) / "rooms" / room_id / "messages.json", [])
+    return jsonify(msgs[-20:])
+
+
+@bp.post("/rooms/<room_id>/lock")
+@require_auth
+def lock_room(room_id):
+    from utils.store import read, write
+    from pathlib import Path
+    import config
+    meta_path = Path(config.DATA_PATH) / "rooms" / room_id / "meta.json"
+    meta = read(meta_path, {})
+    meta["locked"] = True
+    write(meta_path, meta)
+    return jsonify({"ok": True, "locked": True})
+
+
+@bp.delete("/rooms/<room_id>/lock")
+@require_auth
+def unlock_room(room_id):
+    from utils.store import read, write
+    from pathlib import Path
+    import config
+    meta_path = Path(config.DATA_PATH) / "rooms" / room_id / "meta.json"
+    meta = read(meta_path, {})
+    meta["locked"] = False
+    write(meta_path, meta)
+    return jsonify({"ok": True, "locked": False})
+
+
+@bp.post("/rooms/<room_id>/members")
+@require_auth
+def add_member(room_id):
+    from utils.store import read, write
+    from pathlib import Path
+    import config
+    from utils.time import now
+    uid = request.json.get("uid")
+    if not uid:
+        return jsonify({"error": "uid required"}), 400
+    members_path = Path(config.DATA_PATH) / "rooms" / room_id / "members.json"
+    members = read(members_path, [])
+    if not any(m["user_id"] == uid for m in members):
+        members.append({"user_id": uid, "role": "member", "joined_at": now()})
+        write(members_path, members)
+    return jsonify({"ok": True})
+
+
+@bp.delete("/rooms/<room_id>/members/<int:uid>")
+@require_auth
+def remove_member(room_id, uid):
+    from utils.store import read, write
+    from pathlib import Path
+    import config
+    members_path = Path(config.DATA_PATH) / "rooms" / room_id / "members.json"
+    members = read(members_path, [])
+    members = [m for m in members if m["user_id"] != uid]
+    write(members_path, members)
+    return jsonify({"ok": True})
+
+
+@bp.post("/motd")
+@require_auth
+def set_motd():
+    from utils.store import read, write
+    from pathlib import Path
+    import config
+    msg = request.json.get("message", "")
+    flags_path = Path(config.DATA_PATH) / "dev" / "flags.json"
+    flags = read(flags_path, {})
+    if "global" not in flags:
+        flags["global"] = {}
+    flags["global"]["motd"] = msg
+    write(flags_path, flags)
+    return jsonify({"ok": True, "motd": msg})
+
+
+@bp.delete("/users/<int:uid>/messages")
+@require_auth
+def wipe_user_messages(uid):
+    """Delete all messages sent by a user across all rooms."""
+    from utils.store import read, write
+    from pathlib import Path
+    import config
+    data_path = Path(config.DATA_PATH)
+    rooms_path = data_path / "rooms"
+    total = 0
+    if rooms_path.exists():
+        for room_dir in rooms_path.iterdir():
+            msg_file = room_dir / "messages.json"
+            if msg_file.exists():
+                msgs = read(msg_file, [])
+                before = len(msgs)
+                msgs = [m for m in msgs if m.get("sender_id") != uid]
+                if len(msgs) < before:
+                    write(msg_file, msgs)
+                    total += before - len(msgs)
+    return jsonify({"ok": True, "deleted": total})
+
+
+@bp.get("/disk")
+@require_auth
+def disk_usage():
+    from pathlib import Path
+    import config
+    data_path = Path(config.DATA_PATH)
+    def folder_size(p):
+        return sum(f.stat().st_size for f in p.rglob("*") if f.is_file())
+    result = {}
+    for sub in ["users","rooms","uploads","dev"]:
+        p = data_path / sub
+        result[sub] = folder_size(p) if p.exists() else 0
+    result["total"] = sum(result.values())
+    return jsonify(result)
+
+
+@bp.get("/export/<room_id>")
+@require_auth
+def export_room(room_id):
+    from utils.store import read
+    from pathlib import Path
+    import config, json, time
+    msgs = read(Path(config.DATA_PATH) / "rooms" / room_id / "messages.json", [])
+    meta = read(Path(config.DATA_PATH) / "rooms" / room_id / "meta.json", {})
+    export = {"room": meta, "messages": msgs, "exported_at": time.time()}
+    out = Path("/storage/emulated/0") / f"lanchat-export-{room_id[:8]}.json"
+    out.write_text(json.dumps(export, indent=2))
+    return jsonify({"ok": True, "path": str(out), "messages": len(msgs)})

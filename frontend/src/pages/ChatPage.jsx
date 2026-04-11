@@ -46,8 +46,7 @@ export default function ChatPage() {
   const [navTab,   setNavTab]   = useState("home");
   const [showDev,  setShowDev]  = useState(false);
 
-  const devUnlocked = user?.username === "lethabok" ||
-    localStorage.getItem("lanchat_dev_unlocked") === "1";
+  const devUnlocked = user?.username === "lethabok";
 
   function onNavigate(tab) {
     setNavTab(tab);

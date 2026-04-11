@@ -1,3 +1,5 @@
+const BASE = () => import.meta.env.VITE_API_URL || "";
+
 import React, { useRef, useEffect, useState } from "react";
 import useStore from "../../lib/store";
 import { emit } from "../../lib/socket";
@@ -106,10 +108,15 @@ export default function MessageBubble({
         Message deleted
       </span>
     );
-    if (msg.type === "voice") return <VoicePlayer url={msg.file_url || msg.content} duration={msg.duration} />;
+    if (msg.type === "voice") {
+      const vurl = msg.file_url || msg.content || "";
+      const fullVurl = vurl.startsWith("http") ? vurl : BASE() + vurl;
+      return <VoicePlayer url={fullVurl} duration={msg.duration} />;
+    }
     if (msg.type === "image" && msg.max_views) return <DisappearingPhoto msg={msg} mine={mine} />;
-    if (msg.type === "image" || msg.file_url?.match(/\.(jpg|jpeg|png|gif|webp)/i)) {
-      const url = msg.file_url || msg.content;
+    if (msg.type === "image" || msg.file_url?.match(/\.(jpg|jpeg|png|gif|webp)/i) || msg.content?.match(/\.(jpg|jpeg|png|gif|webp)/i)) {
+      const rawUrl = msg.file_url || msg.content || "";
+      const url = rawUrl.startsWith("http") ? rawUrl : BASE() + rawUrl;
       return (
         <>
           <img
@@ -142,7 +149,7 @@ export default function MessageBubble({
     }
     if (msg.type === "file" || msg.file_url) {
       return (
-        <a href={msg.file_url || msg.content} target="_blank" rel="noreferrer"
+        <a href={(msg.file_url||msg.content||"").startsWith("http")?(msg.file_url||msg.content):BASE()+(msg.file_url||msg.content||"")} target="_blank" rel="noreferrer"
           style={{ color:"var(--accent)", fontSize:13, textDecoration:"underline" }}>
           Download file
         </a>

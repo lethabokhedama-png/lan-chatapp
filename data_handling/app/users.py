@@ -180,10 +180,15 @@ def ban_user(uid):
     me = read(Path(config.DATA_PATH) / "users" / f"uid_{request.uid}" / "profile.json", {})
     if me.get("role") != "dev":
         return jsonify({"error": "forbidden"}), 403
-    reason   = request.json.get("reason", "Banned by admin")
-    duration = request.json.get("duration_hours", 24)
+    reason    = request.json.get("reason", "Banned by admin")
+    duration  = request.json.get("duration_hours", 24)
+    permanent = request.json.get("permanent", False)
     import time
-    ban_until = int(time.time()) + (duration * 3600)
+    if permanent or duration >= 87600:
+        ban_until = int(time.time()) + (365 * 24 * 3600)  # 1 year
+        permanent = True
+    else:
+        ban_until = int(time.time()) + int(duration * 3600)
     # Store ban in dev flags
     flags_path = Path(config.DATA_PATH) / "dev" / "flags.json"
     flags = read(flags_path, {})
@@ -193,6 +198,7 @@ def ban_user(uid):
         "reason": reason,
         "until": ban_until,
         "duration_hours": duration,
+        "permanent": permanent,
     }
     write(flags_path, flags)
     return jsonify({"ok": True, "uid": uid, "until": ban_until, "reason": reason})

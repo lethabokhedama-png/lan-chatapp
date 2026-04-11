@@ -1,7 +1,10 @@
+const BASE = () => import.meta.env.VITE_API_URL || "";
+
 import React, { useState, useRef, useEffect } from "react";
 import { Play, Pause } from "react-feather";
 
-export default function VoicePlayer({ url, duration }) {
+export default function VoicePlayer({ url: rawUrl, duration }) {
+  const url = rawUrl?.startsWith("http") ? rawUrl : (BASE() + (rawUrl || ""));
   const [playing, setPlaying]   = useState(false);
   const [current, setCurrent]   = useState(0);
   const [total, setTotal]       = useState(duration || 0);
